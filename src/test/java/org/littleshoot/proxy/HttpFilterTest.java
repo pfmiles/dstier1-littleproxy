@@ -828,6 +828,8 @@ public class HttpFilterTest {
         private final AtomicBoolean proxyToServerResolutionSucceeded = new AtomicBoolean(false);
         private final AtomicBoolean proxyToServerConnectionSSLHandshakeStarted = new AtomicBoolean(false);
         private final AtomicBoolean serverToProxyResponseTimedOut = new AtomicBoolean(false);
+        private final AtomicBoolean proxyToClientShortCircuitResponse = new AtomicBoolean(false);
+        private final AtomicBoolean proxyToServerSiteMapping = new AtomicBoolean(false);
 
         public boolean isProxyToServerConnectionFailedInvoked() {
             return proxyToServerConnectionFailed.get();
@@ -986,5 +988,16 @@ public class HttpFilterTest {
         public void proxyToServerConnectionSSLHandshakeStarted() {
             proxyToServerConnectionSSLHandshakeStarted.set(true);
         }
+
+		@Override
+		public HttpResponse proxyToClientShortCircuitResponse(HttpResponse httpResponse) {
+			proxyToClientShortCircuitResponse.set(true);
+            return httpResponse;
+		}
+
+		@Override
+		public void proxyToServerSiteMapping(String fromSite, String toSite) {
+			proxyToServerSiteMapping.set(true);
+		}
     }
 }

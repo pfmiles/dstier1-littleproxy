@@ -19,14 +19,21 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
 import java.util.Arrays;
+import java.util.Collection;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Set;
 
+import com.github.pfmiles.dstier1.impl.DsT1AdaptingHttpFilters;
+import com.github.pfmiles.dstier1.impl.SortableFilterMethod;
 import com.google.common.base.Strings;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http.HttpRequest;
+import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.tuple.Pair;
 import org.littleshoot.proxy.HttpFilters;
 import org.littleshoot.proxy.HttpFiltersSourceAdapter;
 import org.littleshoot.proxy.HttpProxyServerBootstrap;
-import org.littleshoot.proxy.MitmManager;
 import org.littleshoot.proxy.TransportProtocol;
 import org.littleshoot.proxy.impl.DefaultHttpProxyServer;
 import org.littleshoot.proxy.impl.ProxyUtils;
@@ -75,9 +82,9 @@ public class T1Server {
 			bootstrap.withNetworkInterface(new InetSocketAddress(conf.getNic(), 0));
 		}
 
-		if (!Strings.isNullOrEmpty(conf.getMitmManagerClsName())) {
-			logger.info("Running as Man in the Middle, initializing MITM manager: " + conf.getMitmManagerClsName());
-			bootstrap.withManInTheMiddle((MitmManager) Class.forName(conf.getMitmManagerClsName()).newInstance());
+		if (conf.getMitmManager() != null) {
+			logger.info("Running as Man in the Middle, using MITM manager: " + conf.getMitmManager().toString());
+			bootstrap.withManInTheMiddle(conf.getMitmManager());
 		}
 
 		if (!Strings.isNullOrEmpty(conf.getDnssec())) {
@@ -114,12 +121,12 @@ public class T1Server {
 
 		// bootstrap.withChainProxyManager(chainProxyManager) TODO not implemented yet
 
-		// bootstrap.withServerResolver(serverResolver) TODO need not implement for now
-
 		// bootstrap.plusActivityTracker(activityTracker) TODO not implemented yet
 
+		// bootstrap.withServerResolver(conf.getServerResolver());
+
 		bootstrap.withThrottling(conf.getReadThrottleBytesPerSecond(), conf.getWriteThrottleBytesPerSecond());
-		bootstrap.withAllowRequestToOriginServer(conf.isAllowOriginFormRequests());
+		bootstrap.withAllowRequestToOriginServer(conf.isReverseMode());
 
 		String viaPseudo = conf.getViaPseudonym();
 		if (!Strings.isNullOrEmpty(viaPseudo)) {
@@ -137,7 +144,12 @@ public class T1Server {
 		poolConf.withClientToProxyWorkerThreads(conf.getClientToProxyWorkerThreads());
 		poolConf.withProxyToServerWorkerThreads(conf.getProxyToServerWorkerThreads());
 		bootstrap.withThreadPoolConfiguration(poolConf);
+		bootstrap.withSiteMappingManager(conf.getSiteMappingManager());
 
+		/*
+		 * every time on filters be invoking is to creating new ones, thread-safety by
+		 * default
+		 */
 		bootstrap.withFiltersSource(new HttpFiltersSourceAdapter() {
 
 			@Override
@@ -145,28 +157,47 @@ public class T1Server {
 				return this.filterRequest(originalRequest, null);
 			}
 
+			// only invoked at initial requests(not chunks)
 			@Override
 			public HttpFilters filterRequest(HttpRequest originalRequest, ChannelHandlerContext ctx) {
-				// TODO resolve filters according to the request and context, return null if the
-				// current request need not any filtering
-				return new DsT1HttpFilters(originalRequest, ctx);
+				// 1.if no interests in site mapping, return null
+				if (conf.getSiteMappingManager() == null) {
+					return null;
+				}
+				String fromSite = ProxyUtils.extractSite(originalRequest);
+				String toSite = conf.getSiteMappingManager().siteMapping(fromSite);
+				if (StringUtils.isBlank(toSite)) {
+					return null;
+				}
+				// 2.if no filters will be activated, return null
+				if (conf.getFiltersFactory() == null) {
+					return null;
+				}
+				Collection<T1Filter> filters = conf.getFiltersFactory().buildFilters(new RequestInfo(originalRequest));
+				if (filters == null || filters.isEmpty()) {
+					return null;
+				}
+				// dedup and keep insertion order...
+				Set<T1Filter> fs = new LinkedHashSet<T1Filter>(filters);
+				// Pair<reqMethods, rspMethods>
+				Pair<List<SortableFilterMethod>, List<SortableFilterMethod>> filterMethods = ProxyUtils
+						.buildSortedFilterMethods(fs);
+				if (filterMethods == null) {
+					return null;
+				}
+				List<SortableFilterMethod> reqMethods = filterMethods.getLeft();
+				List<SortableFilterMethod> rspMethods = filterMethods.getRight();
+				if (reqMethods == null || reqMethods.isEmpty() || rspMethods == null || rspMethods.isEmpty()) {
+					return null;
+				}
+				if (reqMethods.size() != rspMethods.size()) {
+					throw new RuntimeException("It's impossible to get here, just for coding validity.");
+				}
+				// 3.create adapting filters
+				return new DsT1AdaptingHttpFilters(ctx, originalRequest, fromSite, toSite, reqMethods, rspMethods,
+						conf.isFailFastOnFilterError());
 			}
 
-			@Override
-			public int getMaximumRequestBufferSizeInBytes() {
-				// TODO specify a non-0 value to enable aggregating and inflating, or handle the
-				// chunks by hand, If the request size exceeds the maximum
-				// buffer size, the request will fail
-				return conf.getMaxReqBufSizeInBytes();
-			}
-
-			@Override
-			public int getMaximumResponseBufferSizeInBytes() {
-				// TODO specify a non-0 value to enable aggregating and inflating, or handle the
-				// chunks by hand, If the response size exceeds the maximum
-				// buffer size, the response will fail
-				return conf.getMaxRspBufSizeInBytes();
-			}
 		});
 
 		logger.info("Starting with configurations: \n" + conf.toString());

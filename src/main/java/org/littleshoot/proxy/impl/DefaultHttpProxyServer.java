@@ -1,5 +1,19 @@
 package org.littleshoot.proxy.impl;
 
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.InetSocketAddress;
+import java.util.Collection;
+import java.util.Properties;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+
+import javax.net.ssl.SSLEngine;
+
+import com.github.pfmiles.dstier1.SiteMappingManager;
 import io.netty.bootstrap.ChannelFactory;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.Channel;
@@ -33,18 +47,6 @@ import org.littleshoot.proxy.TransportProtocol;
 import org.littleshoot.proxy.UnknownTransportProtocolException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import javax.net.ssl.SSLEngine;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.net.InetSocketAddress;
-import java.util.Collection;
-import java.util.Properties;
-import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * <p>
@@ -117,6 +119,7 @@ public class DefaultHttpProxyServer implements HttpProxyServer {
     private final int maxHeaderSize;
     private final int maxChunkSize;
     private final boolean allowRequestsToOriginServer;
+    private final SiteMappingManager siteMappingManager;
 
     /**
      * The alias or pseudonym for this proxy, used when adding the Via header.
@@ -252,7 +255,8 @@ public class DefaultHttpProxyServer implements HttpProxyServer {
             int maxInitialLineLength,
             int maxHeaderSize,
             int maxChunkSize,
-            boolean allowRequestsToOriginServer) {
+            boolean allowRequestsToOriginServer,
+            SiteMappingManager siteMappingManager) {
         this.serverGroup = serverGroup;
         this.transportProtocol = transportProtocol;
         this.requestedAddress = requestedAddress;
@@ -291,6 +295,7 @@ public class DefaultHttpProxyServer implements HttpProxyServer {
         this.maxHeaderSize = maxHeaderSize;
         this.maxChunkSize = maxChunkSize;
         this.allowRequestsToOriginServer = allowRequestsToOriginServer;
+        this.siteMappingManager = siteMappingManager;
     }
 
     /**
@@ -408,7 +413,8 @@ public class DefaultHttpProxyServer implements HttpProxyServer {
                     maxInitialLineLength,
                     maxHeaderSize,
                     maxChunkSize,
-                    allowRequestsToOriginServer);
+                    allowRequestsToOriginServer,
+                    siteMappingManager);
     }
 
     @Override
@@ -624,6 +630,7 @@ public class DefaultHttpProxyServer implements HttpProxyServer {
         private int maxHeaderSize = MAX_HEADER_SIZE_DEFAULT;
         private int maxChunkSize = MAX_CHUNK_SIZE_DEFAULT;
         private boolean allowRequestToOriginServer = false;
+        private SiteMappingManager siteMappingManager;
 
         private DefaultHttpProxyServerBootstrap() {
         }
@@ -648,7 +655,8 @@ public class DefaultHttpProxyServer implements HttpProxyServer {
                 int maxInitialLineLength,
                 int maxHeaderSize,
                 int maxChunkSize,
-                boolean allowRequestToOriginServer) {
+                boolean allowRequestToOriginServer,
+                SiteMappingManager siteMappingManager) {
             this.serverGroup = serverGroup;
             this.transportProtocol = transportProtocol;
             this.requestedAddress = requestedAddress;
@@ -674,6 +682,7 @@ public class DefaultHttpProxyServer implements HttpProxyServer {
         	this.maxHeaderSize = maxHeaderSize;
         	this.maxChunkSize = maxChunkSize;
         	this.allowRequestToOriginServer = allowRequestToOriginServer;
+        	this.siteMappingManager = siteMappingManager;
         }
 
         private DefaultHttpProxyServerBootstrap(Properties props) {
@@ -904,7 +913,7 @@ public class DefaultHttpProxyServer implements HttpProxyServer {
                     idleConnectionTimeout, activityTrackers, connectTimeout,
                     serverResolver, readThrottleBytesPerSecond, writeThrottleBytesPerSecond,
                     localAddress, proxyAlias, maxInitialLineLength, maxHeaderSize, maxChunkSize,
-                    allowRequestToOriginServer);
+                    allowRequestToOriginServer, siteMappingManager);
         }
 
         private InetSocketAddress determineListenAddress() {
@@ -920,5 +929,15 @@ public class DefaultHttpProxyServer implements HttpProxyServer {
                 }
             }
         }
+
+		@Override
+		public HttpProxyServerBootstrap withSiteMappingManager(SiteMappingManager siteMappingManager) {
+			this.siteMappingManager = siteMappingManager;
+			return this;
+		}
     }
+
+	public SiteMappingManager getSiteMappingManager() {
+		return this.siteMappingManager;
+	}
 }

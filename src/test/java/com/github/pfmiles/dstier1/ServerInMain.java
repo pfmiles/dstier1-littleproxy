@@ -3,11 +3,16 @@
  */
 package com.github.pfmiles.dstier1;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 /**
  * @author pf-miles
  *
  */
 public class ServerInMain {
+
+	private static final Logger logger = LoggerFactory.getLogger(ServerInMain.class);
 
 	public static void main(String[] args) throws Exception {
 		T1Conf conf = resolveConf();

@@ -19,6 +19,7 @@ import java.beans.BeanInfo;
 import java.beans.Introspector;
 import java.beans.PropertyDescriptor;
 
+import org.littleshoot.proxy.MitmManager;
 import org.littleshoot.proxy.TransportProtocol;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -59,18 +60,18 @@ public class T1Conf {
 	 */
 	private boolean localOnly = false;
 	/**
-	 * The implementation class name of the 'man-in-the-middle' proxy pattern's
-	 * manager, it's necessary when proxying for https transactions. The class
-	 * specified must implement interface 'org.littleshoot.proxy.MitmManager'.
+	 * The 'man-in-the-middle' proxy pattern's manager, it's necessary when proxying
+	 * for https transactions.
 	 */
-	private String mitmManagerClsName = null;
+	private MitmManager mitmManager = null;
 	/**
 	 * if turn on dnssec verification('true' or 'on' for turn on and 'false' or
 	 * 'off' for off)
 	 */
 	private String dnssec = "off";
 	/**
-	 * Determine if this proxy acts transparently.
+	 * Determine if this proxy acts transparently(Won't do any modification to
+	 * proxied requests).
 	 */
 	private boolean transparent = false;
 	/**
@@ -116,20 +117,20 @@ public class T1Conf {
 	 * Specify the read bandwidth throttles for this proxy server. 0 indicates not
 	 * throttling.
 	 */
-	private int readThrottleBytesPerSecond;
+	private int readThrottleBytesPerSecond = 0;
 	/**
 	 * Specify the write bandwidth throttles for this proxy server. 0 indicates not
 	 * throttling.
 	 */
-	private int writeThrottleBytesPerSecond;
+	private int writeThrottleBytesPerSecond = 0;
 	/**
-	 * when true, the proxy will accept origin-form HTTP requests. The definition of
-	 * 'origin-form HTTP request': https://tools.ietf.org/html/rfc7230#section-5.3.1
-	 * ; <b>Note:</b> This feature should not be enabled when running as a forward
-	 * proxy; doing so may cause an infinite loop if the client requests the URI of
-	 * the proxy.
+	 * if this proxy acts as an reverse-proxy, defaults to reverse proxy. When in
+	 * reverse mode, the proxy will allow requests in origin form. Otherwise, the
+	 * proxy only accepts absolute form requests. According to http 1.1 protocol(RFC
+	 * 7230, section 5.3.2), clients must send requests in absolute form when
+	 * communicating with a forward proxy.
 	 */
-	private boolean allowOriginFormRequests = false;
+	private boolean reverseMode = true;
 	/**
 	 * The pseudonym to be used when crafting a 'Via' header. But whatever this
 	 * value is set to be, the hostname information is automatically appended to the
@@ -157,38 +158,112 @@ public class T1Conf {
 	 */
 	private int proxyToServerWorkerThreads = CORE_NUM * 2;
 	/**
-	 * The request buffer size to decode and collect the request data when the proxy
-	 * decided to filter the quest. If setting this value to 0, the server wouldn't
-	 * do the decoding and collecting for you, then you would handle the chunks by
-	 * hand. TODO Now if the request size exceeds the maximum buffer size, the
-	 * request will fail. We want it not fail but continue processing with remaining
-	 * raw bytes, implement later.
+	 * The max request size to be filtered in bytes, if the request size exceeds
+	 * this value, it won't be filtered in any way. TODO
 	 */
-	private int maxReqBufSizeInBytes = 512 * 1024;
+	private int maxFilteringReqSize = 1024 * 1024;
 	/**
-	 * The response buffer size to decode and collect the response data when the
-	 * proxy decided to filter the response. If setting this value to 0, the server
-	 * wouldn't do the decoding and collecting for you, then you would handle the
-	 * chunks by hand. TODO Now if the response size exceeds the maximum buffer
-	 * size, the response will fail. We want it not fail but continue processing
-	 * with remaining raw bytes, implement later.
+	 * The max request buffer size to automatically collect the request data when
+	 * filtering the incoming requests from client. Requests which have a size less
+	 * than this value will be fully-collected as a 'whole-request', that means no
+	 * following chunks need to be processed. Those which larger than this value,
+	 * need to be processed in a chunked manner in user provided filter
+	 * implementations. TODO
 	 */
-	private int maxRspBufSizeInBytes = 1024 * 1024;
+	private int maxFullyCollectReqSize = 256 * 1024;
+	/**
+	 * The max response size to be filtered in bytes, if the response size exceeds
+	 * this value, it won't be filtered in any way. TODO
+	 */
+	private int maxFilteringRspSize = 10240 * 1024;
+	/**
+	 * The max response buffer size to automatically collect the response data when
+	 * filtering the out-going responses from server. Responses which have a size
+	 * less than this value will be fully-collected as a 'whole-response', that
+	 * means no following chunks need to be processed. Those which larger than this
+	 * value, need to be processed in a chunked manner in user provided filter
+	 * implementations. TODO
+	 */
+	private int maxFullyCollectRspSize = 256 * 1024;
+	/**
+	 * Specify the site mapping manager.
+	 */
+	private SiteMappingManager siteMappingManager;
+	/**
+	 * Filter factory to be used to create filter instances to process reqs/rsps.
+	 * Filters will be created in a per-request manner, so they are thread-safe and
+	 * can keep states.
+	 */
+	private FiltersFactory filtersFactory;
+	/**
+	 * Whether respond with a 'bad gateway' response and terminate the processing
+	 * immediately when any filter method execution throws exception, or just ignore
+	 * and continue execution. Defaults to not fail fast(ignore and continue).
+	 */
+	private boolean failFastOnFilterError = false;
 
-	public int getMaxRspBufSizeInBytes() {
-		return maxRspBufSizeInBytes;
+	public boolean isFailFastOnFilterError() {
+		return failFastOnFilterError;
 	}
 
-	public void setMaxRspBufSizeInBytes(int maxRspBufSizeInBytes) {
-		this.maxRspBufSizeInBytes = maxRspBufSizeInBytes;
+	public void setFailFastOnFilterError(boolean failFastOnFilterError) {
+		this.failFastOnFilterError = failFastOnFilterError;
 	}
 
-	public int getMaxReqBufSizeInBytes() {
-		return maxReqBufSizeInBytes;
+	public FiltersFactory getFiltersFactory() {
+		return filtersFactory;
 	}
 
-	public void setMaxReqBufSizeInBytes(int maxReqBufSizeInBytes) {
-		this.maxReqBufSizeInBytes = maxReqBufSizeInBytes;
+	public void setFiltersFactory(FiltersFactory filtersFactory) {
+		this.filtersFactory = filtersFactory;
+	}
+
+	public boolean isReverseMode() {
+		return reverseMode;
+	}
+
+	public void setReverseMode(boolean reverseMode) {
+		this.reverseMode = reverseMode;
+	}
+
+	public SiteMappingManager getSiteMappingManager() {
+		return siteMappingManager;
+	}
+
+	public void setSiteMappingManager(SiteMappingManager siteMappingManager) {
+		this.siteMappingManager = siteMappingManager;
+	}
+
+	public int getMaxFilteringReqSize() {
+		return maxFilteringReqSize;
+	}
+
+	public void setMaxFilteringReqSize(int maxFilteringReqSize) {
+		this.maxFilteringReqSize = maxFilteringReqSize;
+	}
+
+	public int getMaxFullyCollectReqSize() {
+		return maxFullyCollectReqSize;
+	}
+
+	public void setMaxFullyCollectReqSize(int maxFullyCollectReqSize) {
+		this.maxFullyCollectReqSize = maxFullyCollectReqSize;
+	}
+
+	public int getMaxFilteringRspSize() {
+		return maxFilteringRspSize;
+	}
+
+	public void setMaxFilteringRspSize(int maxFilteringRspSize) {
+		this.maxFilteringRspSize = maxFilteringRspSize;
+	}
+
+	public int getMaxFullyCollectRspSize() {
+		return maxFullyCollectRspSize;
+	}
+
+	public void setMaxFullyCollectRspSize(int maxFullyCollectRspSize) {
+		this.maxFullyCollectRspSize = maxFullyCollectRspSize;
 	}
 
 	public int getAcceptorThreads() {
@@ -221,14 +296,6 @@ public class T1Conf {
 
 	public void setViaPseudonym(String viaPseudonym) {
 		this.viaPseudonym = viaPseudonym;
-	}
-
-	public boolean isAllowOriginFormRequests() {
-		return allowOriginFormRequests;
-	}
-
-	public void setAllowOriginFormRequests(boolean allowOriginFormRequests) {
-		this.allowOriginFormRequests = allowOriginFormRequests;
 	}
 
 	public int getReadThrottleBytesPerSecond() {
@@ -279,12 +346,12 @@ public class T1Conf {
 		this.localOnly = localOnly;
 	}
 
-	public String getMitmManagerClsName() {
-		return mitmManagerClsName;
+	public MitmManager getMitmManager() {
+		return mitmManager;
 	}
 
-	public void setMitmManagerClsName(String mitmManagerClsName) {
-		this.mitmManagerClsName = mitmManagerClsName;
+	public void setMitmManager(MitmManager mitmManager) {
+		this.mitmManager = mitmManager;
 	}
 
 	public String getDnssec() {

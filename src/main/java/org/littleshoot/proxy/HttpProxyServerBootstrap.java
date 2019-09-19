@@ -1,8 +1,9 @@
 package org.littleshoot.proxy;
 
-import org.littleshoot.proxy.impl.ThreadPoolConfiguration;
-
 import java.net.InetSocketAddress;
+
+import com.github.pfmiles.dstier1.SiteMappingManager;
+import org.littleshoot.proxy.impl.ThreadPoolConfiguration;
 
 /**
  * Configures and starts an {@link HttpProxyServer}. The HttpProxyServer is
@@ -335,4 +336,11 @@ public interface HttpProxyServerBootstrap {
      * @return proxy server bootstrap for chaining
      */
     HttpProxyServerBootstrap withThreadPoolConfiguration(ThreadPoolConfiguration configuration);
+    
+    /**
+     * 
+     * @param siteMappingManager
+     * @return
+     */
+    HttpProxyServerBootstrap withSiteMappingManager(SiteMappingManager siteMappingManager);
 }

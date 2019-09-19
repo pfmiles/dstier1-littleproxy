@@ -1,5 +1,22 @@
 package org.littleshoot.proxy.impl;
 
+import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.net.UnknownHostException;
+import java.nio.charset.Charset;
+import java.util.Date;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.regex.Pattern;
+
+import javax.net.ssl.SSLSession;
+
 import com.google.common.io.BaseEncoding;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
@@ -31,22 +48,6 @@ import org.littleshoot.proxy.HttpFilters;
 import org.littleshoot.proxy.HttpFiltersAdapter;
 import org.littleshoot.proxy.ProxyAuthenticator;
 import org.littleshoot.proxy.SslEngineSource;
-
-import javax.net.ssl.SSLSession;
-import java.io.IOException;
-import java.net.InetSocketAddress;
-import java.net.UnknownHostException;
-import java.nio.charset.Charset;
-import java.util.Date;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.RejectedExecutionException;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.regex.Pattern;
 
 import static org.littleshoot.proxy.impl.ConnectionState.AWAITING_CHUNK;
 import static org.littleshoot.proxy.impl.ConnectionState.AWAITING_INITIAL;
@@ -263,8 +264,13 @@ public class ClientToProxyConnection extends ProxyConnection<HttpRequest> {
             }
         }
 
+        // do site mapping when manager exists
+        if (this.proxyServer.getSiteMappingManager() != null) {
+        	siteMapping(httpRequest);
+        }
+
         // Identify our server and chained proxy
-        String serverHostAndPort = identifyHostAndPort(httpRequest);
+        String serverHostAndPort = ProxyUtils.parseHostAndPort(httpRequest);
 
         LOG.debug("Ensuring that hostAndPort are available in {}",
                 httpRequest.getUri());
@@ -335,6 +341,7 @@ public class ClientToProxyConnection extends ProxyConnection<HttpRequest> {
 
         modifyRequestHeadersToReflectProxying(httpRequest);
 
+        // TODO	on sending request to server, intercepts here!!!
         HttpResponse proxyToServerFilterResponse = currentFilters.proxyToServerRequest(httpRequest);
         if (proxyToServerFilterResponse != null) {
             LOG.debug("Responding to client with short-circuit response from filter: {}", proxyToServerFilterResponse);
@@ -361,6 +368,20 @@ public class ClientToProxyConnection extends ProxyConnection<HttpRequest> {
     }
 
     /**
+	 * do site mapping when manager specified.
+	 */
+	private void siteMapping(HttpRequest httpRequest) {
+		String fromSite = ProxyUtils.extractSite(httpRequest);
+		// modify the request's destination site using the results from siteMappingManager
+		String toSite = this.proxyServer.getSiteMappingManager().siteMapping(fromSite);
+		if (StringUtils.isBlank(toSite)) return;
+		ProxyUtils.setSite(httpRequest, toSite);
+		LOG.debug("Mapped site from: '{}' to: '{}'.", fromSite, toSite);
+		// inform the filters that site mapping
+		this.currentFilters.proxyToServerSiteMapping(fromSite, toSite);
+	}
+
+	/**
      * Returns true if the specified request is a request to an origin server, rather than to a proxy server. If this
      * request is being MITM'd, this method always returns false. The format of requests to a proxy server are defined
      * in RFC 7230, section 5.3.2 (all other requests are considered requests to an origin server):
@@ -395,8 +416,8 @@ public class ClientToProxyConnection extends ProxyConnection<HttpRequest> {
     @Override
     protected void readHTTPChunk(HttpContent chunk) {
         currentFilters.clientToProxyRequest(chunk);
+        // TODO	on sending request to server, intercepts here!!!
         currentFilters.proxyToServerRequest(chunk);
-
         currentServerConnection.write(chunk);
     }
 
@@ -464,7 +485,7 @@ public class ClientToProxyConnection extends ProxyConnection<HttpRequest> {
             fixHttpVersionHeaderIfNecessary(httpResponse);
             modifyResponseHeadersToReflectProxying(httpResponse);
         }
-
+        // TODO on responding filter intercepts here!!!
         httpObject = filters.proxyToClientResponse(httpObject);
         if (httpObject == null) {
             forceDisconnect(serverConnection);
@@ -790,7 +811,7 @@ public class ClientToProxyConnection extends ProxyConnection<HttpRequest> {
                 proxyServer.getMaxHeaderSize(),
                 proxyServer.getMaxChunkSize()));
 
-        // Enable aggregation for filtering if necessary
+        // Enable aggregation for filtering if necessary TODO modify to accommodate the new features
         int numberOfBytesToBuffer = proxyServer.getFiltersSource()
                 .getMaximumRequestBufferSizeInBytes();
         if (numberOfBytesToBuffer > 0) {
@@ -1256,7 +1277,7 @@ public class ClientToProxyConnection extends ProxyConnection<HttpRequest> {
 
     /**
      * Responds to the client with the specified "short-circuit" response. The response will be sent through the
-     * {@link HttpFilters#proxyToClientResponse(HttpObject)} filter method before writing it to the client. The client
+     * {@link HttpFilters#proxyToClientShortCircuitResponse(HttpObject)} filter method before writing it to the client. The client
      * will not be disconnected, unless the response includes a "Connection: close" header, or the filter returns
      * a null HttpResponse (in which case no response will be written to the client and the connection will be
      * disconnected immediately). If the response is not a Bad Gateway or Gateway Timeout response, the response's headers
@@ -1269,7 +1290,7 @@ public class ClientToProxyConnection extends ProxyConnection<HttpRequest> {
         // we are sending a response to the client, so we are done handling this request
         this.currentRequest = null;
 
-        HttpResponse filteredResponse = (HttpResponse) currentFilters.proxyToClientResponse(httpResponse);
+        HttpResponse filteredResponse = (HttpResponse) currentFilters.proxyToClientShortCircuitResponse(httpResponse);
         if (filteredResponse == null) {
             disconnect();
             return false;
@@ -1300,25 +1321,6 @@ public class ClientToProxyConnection extends ProxyConnection<HttpRequest> {
         }
 
         return true;
-    }
-
-    /**
-     * Identify the host and port for a request.
-     * 
-     * @param httpRequest
-     * @return
-     */
-    private String identifyHostAndPort(HttpRequest httpRequest) {
-        String hostAndPort = ProxyUtils.parseHostAndPort(httpRequest);
-        if (StringUtils.isBlank(hostAndPort)) {
-            List<String> hosts = httpRequest.headers().getAll(
-                    HttpHeaders.Names.HOST);
-            if (hosts != null && !hosts.isEmpty()) {
-                hostAndPort = hosts.get(0);
-            }
-        }
-
-        return hostAndPort;
     }
 
     /**

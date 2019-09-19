@@ -15,7 +15,8 @@
  ******************************************************************************/
 package com.github.pfmiles;
 
-import java.net.InetAddress;
+import io.netty.handler.codec.http.DefaultHttpHeaders;
+import io.netty.handler.codec.http.HttpHeaders;
 
 /**
  * @author pf-miles
@@ -23,6 +24,11 @@ import java.net.InetAddress;
  */
 public class Test {
 	public static void main(String... args) throws Exception {
-		System.out.println(InetAddress.getLocalHost().getHostName());
+		HttpHeaders hs = new DefaultHttpHeaders();
+		hs.add("test", "v1");
+		hs.add("test", "v2");
+		hs.add("Test", "v3");
+		hs.add("TEST", "v4");
+		System.out.println(hs.get("test"));
 	}
 }

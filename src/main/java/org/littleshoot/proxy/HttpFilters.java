@@ -208,4 +208,23 @@ public interface HttpFilters {
      */
     void proxyToServerConnectionSucceeded(ChannelHandlerContext serverCtx);
 
+    /**
+     * Filters short-circuit responses on their way from the proxy to the client. Short-circuit responses
+     * are created by components in proxy itself, and destined to be a full-response(not chunked).
+     * 
+     * @param httpResponse
+     *            Proxy to Client short-circuit HttpResponse, must be a full-response(not chunked).
+     * @return the modified (or unmodified) httpResponse. Returning null will
+     *         force a disconnect.
+     */
+    HttpResponse proxyToClientShortCircuitResponse(HttpResponse httpResponse);
+
+	/**
+	 * Site mapping completed
+	 * 
+	 * @param fromSite site before mapping
+	 * @param toSite site after mapping
+	 */
+	void proxyToServerSiteMapping(String fromSite, String toSite);
+
 }
