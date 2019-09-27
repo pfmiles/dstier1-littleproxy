@@ -13,7 +13,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import javax.net.ssl.SSLEngine;
 
-import com.github.pfmiles.dstier1.SiteMappingManager;
 import com.github.pfmiles.dstier1.T1Conf;
 import io.netty.bootstrap.ChannelFactory;
 import io.netty.bootstrap.ServerBootstrap;
@@ -932,8 +931,8 @@ public class DefaultHttpProxyServer implements HttpProxyServer {
         }
 
 		@Override
-		public HttpProxyServerBootstrap withSiteMappingManager(SiteMappingManager siteMappingManager) {
-			this.t1Conf.setSiteMappingManager(siteMappingManager);
+		public HttpProxyServerBootstrap withT1Conf(T1Conf t1Conf) {
+			this.t1Conf = t1Conf;
 			return this;
 		}
     }

@@ -2,7 +2,7 @@ package org.littleshoot.proxy;
 
 import java.net.InetSocketAddress;
 
-import com.github.pfmiles.dstier1.SiteMappingManager;
+import com.github.pfmiles.dstier1.T1Conf;
 import org.littleshoot.proxy.impl.ThreadPoolConfiguration;
 
 /**
@@ -337,10 +337,5 @@ public interface HttpProxyServerBootstrap {
      */
     HttpProxyServerBootstrap withThreadPoolConfiguration(ThreadPoolConfiguration configuration);
     
-    /**
-     * 
-     * @param siteMappingManager
-     * @return
-     */
-    HttpProxyServerBootstrap withSiteMappingManager(SiteMappingManager siteMappingManager);
+    HttpProxyServerBootstrap withT1Conf(T1Conf t1Conf);
 }

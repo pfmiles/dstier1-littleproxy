@@ -141,7 +141,7 @@ public class T1Server {
 		poolConf.withClientToProxyWorkerThreads(conf.getClientToProxyWorkerThreads());
 		poolConf.withProxyToServerWorkerThreads(conf.getProxyToServerWorkerThreads());
 		bootstrap.withThreadPoolConfiguration(poolConf);
-		bootstrap.withSiteMappingManager(conf.getSiteMappingManager());
+		bootstrap.withT1Conf(conf);
 
 		/*
 		 * every time on filters be invoking is to creating new ones, thread-safety by
