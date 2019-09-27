@@ -20,6 +20,9 @@ import org.mockserver.integration.ClientAndServer;
 import org.mockserver.matchers.Times;
 
 import javax.net.ssl.SSLEngine;
+
+import com.github.pfmiles.dstier1.impl.ValueHolder;
+
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.Socket;
@@ -417,7 +420,7 @@ public class HttpFilterTest {
 
         HttpFiltersSource filtersSource = new HttpFiltersSourceAdapter() {
             @Override
-            public HttpFilters filterRequest(HttpRequest originalRequest) {
+            public HttpFilters filterRequest(HttpRequest originalRequest, ValueHolder perReqVals) {
                 return new HttpFiltersAdapter(originalRequest) {
                     @Override
                     public InetSocketAddress proxyToServerResolutionStarted(String resolvingServerHostAndPort) {
@@ -447,7 +450,7 @@ public class HttpFilterTest {
 
         HttpFiltersSource filtersSource = new HttpFiltersSourceAdapter() {
             @Override
-            public HttpFilters filterRequest(HttpRequest originalRequest) {
+            public HttpFilters filterRequest(HttpRequest originalRequest, ValueHolder perReqVals) {
                 return filter;
             }
         };
@@ -493,7 +496,7 @@ public class HttpFilterTest {
 
         HttpFiltersSource filtersSource = new HttpFiltersSourceAdapter() {
             @Override
-            public HttpFilters filterRequest(HttpRequest originalRequest) {
+            public HttpFilters filterRequest(HttpRequest originalRequest, ValueHolder perReqVals) {
                 return filter;
             }
         };
@@ -537,7 +540,7 @@ public class HttpFilterTest {
 
         HttpFiltersSource filtersSource = new HttpFiltersSourceAdapter() {
             @Override
-            public HttpFilters filterRequest(HttpRequest originalRequest) {
+            public HttpFilters filterRequest(HttpRequest originalRequest, ValueHolder perReqVals) {
                 return filter;
             }
         };
@@ -605,7 +608,7 @@ public class HttpFilterTest {
 
         HttpFiltersSource filtersSource = new HttpFiltersSourceAdapter() {
             @Override
-            public HttpFilters filterRequest(HttpRequest originalRequest) {
+            public HttpFilters filterRequest(HttpRequest originalRequest, ValueHolder perReqVals) {
                 return filter;
             }
         };
@@ -681,7 +684,7 @@ public class HttpFilterTest {
 
         HttpFiltersSource filtersSource = new HttpFiltersSourceAdapter() {
             @Override
-            public HttpFilters filterRequest(HttpRequest originalRequest) {
+            public HttpFilters filterRequest(HttpRequest originalRequest, ValueHolder perReqVals) {
                 return filter;
             }
         };
@@ -728,7 +731,7 @@ public class HttpFilterTest {
 
         HttpFiltersSource filtersSource = new HttpFiltersSourceAdapter() {
             @Override
-            public HttpFilters filterRequest(HttpRequest originalRequest) {
+            public HttpFilters filterRequest(HttpRequest originalRequest, ValueHolder perReqVals) {
                 return new HttpFiltersAdapter(originalRequest) {
                     @Override
                     public HttpResponse proxyToServerRequest(HttpObject httpObject) {
@@ -788,7 +791,7 @@ public class HttpFilterTest {
 
         HttpFiltersSource filtersSource = new HttpFiltersSourceAdapter() {
             @Override
-            public HttpFilters filterRequest(HttpRequest originalRequest) {
+            public HttpFilters filterRequest(HttpRequest originalRequest, ValueHolder perReqVals) {
                 return null;
             }
         };

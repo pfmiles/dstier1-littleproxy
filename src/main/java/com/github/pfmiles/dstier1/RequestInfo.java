@@ -18,7 +18,7 @@ public class RequestInfo {
 	private String uri;
 	private HeaderInfo headers;
 
-	RequestInfo(HttpRequest request) {
+	public RequestInfo(HttpRequest request) {
 		this.method = request.getMethod();
 		this.uri = request.getUri();
 		this.headers = new HeaderInfo(request.headers());

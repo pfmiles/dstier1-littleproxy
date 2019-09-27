@@ -24,6 +24,8 @@ import org.slf4j.LoggerFactory;
 
 import java.util.concurrent.TimeUnit;
 
+import com.github.pfmiles.dstier1.impl.ValueHolder;
+
 import static org.hamcrest.Matchers.greaterThan;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThat;
@@ -126,7 +128,7 @@ public class EndToEndStoppingTest {
                 .withPort(0)
                 .withFiltersSource(new HttpFiltersSourceAdapter() {
                     @Override
-                    public HttpFilters filterRequest(HttpRequest originalRequest) {
+                    public HttpFilters filterRequest(HttpRequest originalRequest, ValueHolder perReqVals) {
                         return new HttpFiltersAdapter(originalRequest) {
                             @Override
                             public io.netty.handler.codec.http.HttpResponse proxyToServerRequest(

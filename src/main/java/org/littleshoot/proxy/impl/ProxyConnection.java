@@ -1,20 +1,36 @@
 package org.littleshoot.proxy.impl;
 
+import javax.net.ssl.SSLEngine;
+
+import com.github.pfmiles.dstier1.impl.T1PreparingDecompressor;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
-import io.netty.channel.*;
-import io.netty.handler.codec.http.*;
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelInboundHandlerAdapter;
+import io.netty.channel.ChannelOutboundHandlerAdapter;
+import io.netty.channel.ChannelPipeline;
+import io.netty.channel.ChannelPromise;
+import io.netty.channel.SimpleChannelInboundHandler;
+import io.netty.handler.codec.http.HttpContent;
+import io.netty.handler.codec.http.HttpMessage;
+import io.netty.handler.codec.http.HttpObject;
+import io.netty.handler.codec.http.HttpRequest;
+import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.ssl.SslHandler;
 import io.netty.handler.timeout.IdleStateEvent;
 import io.netty.util.ReferenceCounted;
 import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.GenericFutureListener;
 import io.netty.util.concurrent.Promise;
-import org.littleshoot.proxy.HttpFilters;
+import org.littleshoot.proxy.HttpProxyServer;
 
-import javax.net.ssl.SSLEngine;
-
-import static org.littleshoot.proxy.impl.ConnectionState.*;
+import static org.littleshoot.proxy.impl.ConnectionState.AWAITING_CHUNK;
+import static org.littleshoot.proxy.impl.ConnectionState.AWAITING_INITIAL;
+import static org.littleshoot.proxy.impl.ConnectionState.DISCONNECTED;
+import static org.littleshoot.proxy.impl.ConnectionState.HANDSHAKING;
+import static org.littleshoot.proxy.impl.ConnectionState.NEGOTIATING_CONNECT;
 
 /**
  * <p>
@@ -78,6 +94,10 @@ abstract class ProxyConnection<I extends HttpObject> extends
      * If using encryption, this holds our {@link SSLEngine}.
      */
     protected volatile SSLEngine sslEngine;
+    
+    public HttpProxyServer getProxyServer() {
+    	return this.proxyServer;
+    }
 
     /**
      * Construct a new ProxyConnection.
@@ -420,9 +440,9 @@ abstract class ProxyConnection<I extends HttpObject> extends
      */
     protected void aggregateContentForFiltering(ChannelPipeline pipeline,
             int numberOfBytesToBuffer) {
-        pipeline.addLast("inflater", new HttpContentDecompressor());
-        pipeline.addLast("aggregator", new HttpObjectAggregator(
-                numberOfBytesToBuffer));
+        pipeline.addLast("inflater", new T1PreparingDecompressor());
+//        pipeline.addLast("aggregator", new HttpObjectAggregator(
+//                numberOfBytesToBuffer));
     }
 
     /**
@@ -560,19 +580,19 @@ abstract class ProxyConnection<I extends HttpObject> extends
         this.channel.config().setAutoRead(true);
     }
 
-    /**
-     * Request the ProxyServer for Filters.
-     * 
-     * By default, no-op filters are returned by DefaultHttpProxyServer.
-     * Subclasses of ProxyConnection can change this behaviour.
-     * 
-     * @param httpRequest
-     *            Filter attached to the give HttpRequest (if any)
-     * @return
-     */
-    protected HttpFilters getHttpFiltersFromProxyServer(HttpRequest httpRequest) {
-        return proxyServer.getFiltersSource().filterRequest(httpRequest, ctx);
-    }
+//    /**
+//     * Request the ProxyServer for Filters.
+//     * 
+//     * By default, no-op filters are returned by DefaultHttpProxyServer.
+//     * Subclasses of ProxyConnection can change this behaviour.
+//     * 
+//     * @param httpRequest
+//     *            Filter attached to the give HttpRequest (if any)
+//     * @return
+//     */
+//    protected HttpFilters getHttpFiltersFromProxyServer(HttpRequest httpRequest) {
+//        return proxyServer.getFiltersSource().filterRequest(httpRequest, ctx);
+//    }
 
     ProxyConnectionLogger getLOG() {
         return LOG;

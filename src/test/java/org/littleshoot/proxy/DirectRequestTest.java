@@ -14,6 +14,9 @@ import org.littleshoot.proxy.impl.DefaultHttpProxyServer;
 import org.littleshoot.proxy.test.HttpClientUtil;
 
 import javax.net.ssl.SSLException;
+
+import com.github.pfmiles.dstier1.impl.ValueHolder;
+
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.hamcrest.Matchers.instanceOf;
@@ -69,7 +72,7 @@ public class DirectRequestTest {
         final HttpResponseStatus status = HttpResponseStatus.valueOf(statusCode);
         HttpFiltersSource filtersSource = new HttpFiltersSourceAdapter() {
             @Override
-            public HttpFilters filterRequest(HttpRequest originalRequest) {
+            public HttpFilters filterRequest(HttpRequest originalRequest, ValueHolder perReqVals) {
                 return new HttpFiltersAdapter(originalRequest) {
                     @Override
                     public HttpResponse clientToProxyRequest(HttpObject httpObject) {
@@ -112,7 +115,7 @@ public class DirectRequestTest {
                 .withProxyAlias("testAllowRequestToOriginServerWithOverride")
                 .withFiltersSource(new HttpFiltersSourceAdapter() {
                     @Override
-                    public HttpFilters filterRequest(HttpRequest originalRequest) {
+                    public HttpFilters filterRequest(HttpRequest originalRequest, ValueHolder perReqVals) {
                         return new HttpFiltersAdapter(originalRequest) {
                             @Override
                             public HttpResponse clientToProxyRequest(HttpObject httpObject) {

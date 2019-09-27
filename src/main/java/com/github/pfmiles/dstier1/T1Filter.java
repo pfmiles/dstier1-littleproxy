@@ -31,7 +31,8 @@ public interface T1Filter {
 	/**
 	 * Filtering requests from client to server. Return null if you want the
 	 * requesting progress to continue, or a hand-crafted HttpResponse object to
-	 * short-circuit the process.
+	 * short-circuit the process. The HttpObjectAggregator.decode method could be a
+	 * reference to this method's implementation.
 	 * 
 	 * @param httpObj
 	 *            the HttpRequest object to be filtered, or HttpContent object
@@ -42,7 +43,8 @@ public interface T1Filter {
 
 	/**
 	 * Filtering responses from server to client, returning null will force a
-	 * disconnect.
+	 * disconnect. The HttpObjectAggregator.decode method could be a reference to
+	 * this method's implementation.
 	 * 
 	 * @param httpObj
 	 *            the response(HttpResponse) or chunk(HttpContent) object to be

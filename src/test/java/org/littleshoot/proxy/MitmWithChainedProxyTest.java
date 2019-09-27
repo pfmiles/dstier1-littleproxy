@@ -8,6 +8,7 @@ import java.nio.charset.Charset;
 import java.util.HashSet;
 import java.util.Set;
 
+import com.github.pfmiles.dstier1.impl.ValueHolder;
 import org.littleshoot.proxy.extras.SelfSignedMitmManager;
 
 import io.netty.handler.codec.http.HttpContent;
@@ -43,7 +44,7 @@ public class MitmWithChainedProxyTest extends BaseChainedProxyTest {
                 .withManInTheMiddle(new SelfSignedMitmManager())
                 .withFiltersSource(new HttpFiltersSourceAdapter() {
                     @Override
-                    public HttpFilters filterRequest(HttpRequest originalRequest) {
+                    public HttpFilters filterRequest(HttpRequest originalRequest, ValueHolder perVals) {
                         return new HttpFiltersAdapter(originalRequest) {
                             @Override
                             public HttpResponse clientToProxyRequest(

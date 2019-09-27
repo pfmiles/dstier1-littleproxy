@@ -17,6 +17,7 @@ import java.util.regex.Pattern;
 
 import javax.net.ssl.SSLSession;
 
+import com.github.pfmiles.dstier1.impl.ValueHolder;
 import com.google.common.io.BaseEncoding;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
@@ -141,8 +142,12 @@ public class ClientToProxyConnection extends ProxyConnection<HttpRequest> {
      * The current HTTP request that this connection is currently servicing.
      */
     private volatile HttpRequest currentRequest;
-
-    ClientToProxyConnection(
+    /**
+     * Values shared during a whole request's processing, it's created at the decoding of an initial request, and discarded at the end of the corresponding response.
+     */
+    private volatile ValueHolder perReqVals;
+    
+	ClientToProxyConnection(
             final DefaultHttpProxyServer proxyServer,
             SslEngineSource sslEngineSource,
             boolean authenticateClients,
@@ -232,7 +237,7 @@ public class ClientToProxyConnection extends ProxyConnection<HttpRequest> {
 
         // Set up our filters based on the original request. If the HttpFiltersSource returns null (meaning the request/response
         // should not be filtered), fall back to the default no-op filter source.
-        HttpFilters filterInstance = proxyServer.getFiltersSource().filterRequest(currentRequest, ctx);
+        HttpFilters filterInstance = proxyServer.getFiltersSource().filterRequest(currentRequest, ctx, this.perReqVals);
         if (filterInstance != null) {
             currentFilters = filterInstance;
         } else {
@@ -265,7 +270,7 @@ public class ClientToProxyConnection extends ProxyConnection<HttpRequest> {
         }
 
         // do site mapping when manager exists
-        if (this.proxyServer.getSiteMappingManager() != null) {
+        if (this.proxyServer.getT1Conf().getSiteMappingManager() != null) {
         	siteMapping(httpRequest);
         }
 
@@ -341,7 +346,7 @@ public class ClientToProxyConnection extends ProxyConnection<HttpRequest> {
 
         modifyRequestHeadersToReflectProxying(httpRequest);
 
-        // TODO	on sending request to server, intercepts here!!!
+        // TODO	pf_miles: on sending request to server, intercepts here!!!
         HttpResponse proxyToServerFilterResponse = currentFilters.proxyToServerRequest(httpRequest);
         if (proxyToServerFilterResponse != null) {
             LOG.debug("Responding to client with short-circuit response from filter: {}", proxyToServerFilterResponse);
@@ -371,9 +376,9 @@ public class ClientToProxyConnection extends ProxyConnection<HttpRequest> {
 	 * do site mapping when manager specified.
 	 */
 	private void siteMapping(HttpRequest httpRequest) {
-		String fromSite = ProxyUtils.extractSite(httpRequest);
+		String fromSite = ProxyUtils.resolveFromSite(httpRequest, this.perReqVals);
 		// modify the request's destination site using the results from siteMappingManager
-		String toSite = this.proxyServer.getSiteMappingManager().siteMapping(fromSite);
+		String toSite = ProxyUtils.resolveToSite(this.proxyServer.getT1Conf().getSiteMappingManager(), fromSite, this.perReqVals);
 		if (StringUtils.isBlank(toSite)) return;
 		ProxyUtils.setSite(httpRequest, toSite);
 		LOG.debug("Mapped site from: '{}' to: '{}'.", fromSite, toSite);
@@ -416,7 +421,7 @@ public class ClientToProxyConnection extends ProxyConnection<HttpRequest> {
     @Override
     protected void readHTTPChunk(HttpContent chunk) {
         currentFilters.clientToProxyRequest(chunk);
-        // TODO	on sending request to server, intercepts here!!!
+        // TODO	pf_miles: on sending request to server, intercepts here!!!
         currentFilters.proxyToServerRequest(chunk);
         currentServerConnection.write(chunk);
     }
@@ -485,7 +490,7 @@ public class ClientToProxyConnection extends ProxyConnection<HttpRequest> {
             fixHttpVersionHeaderIfNecessary(httpResponse);
             modifyResponseHeadersToReflectProxying(httpResponse);
         }
-        // TODO on responding filter intercepts here!!!
+        // TODO pf_miles: on responding filter intercepts here!!!
         httpObject = filters.proxyToClientResponse(httpObject);
         if (httpObject == null) {
             forceDisconnect(serverConnection);
@@ -811,12 +816,12 @@ public class ClientToProxyConnection extends ProxyConnection<HttpRequest> {
                 proxyServer.getMaxHeaderSize(),
                 proxyServer.getMaxChunkSize()));
 
-        // Enable aggregation for filtering if necessary TODO modify to accommodate the new features
+        // Enable aggregation for filtering if necessary TODO pf_miles: modify to accommodate the new features
         int numberOfBytesToBuffer = proxyServer.getFiltersSource()
                 .getMaximumRequestBufferSizeInBytes();
-        if (numberOfBytesToBuffer > 0) {
-            aggregateContentForFiltering(pipeline, numberOfBytesToBuffer);
-        }
+        //        if (numberOfBytesToBuffer > 0) {
+        aggregateContentForFiltering(pipeline, numberOfBytesToBuffer);
+        //        }
 
         pipeline.addLast("requestReadMonitor", requestReadMonitor);
         pipeline.addLast("responseWrittenMonitor", responseWrittenMonitor);
@@ -1453,5 +1458,13 @@ public class ClientToProxyConnection extends ProxyConnection<HttpRequest> {
             return new FlowContext(this);
         }
     }
+    
+    public ValueHolder getPerReqVals() {
+		return perReqVals;
+	}
+
+	public void setPerReqVals(ValueHolder perReqVals) {
+		this.perReqVals = perReqVals;
+	}
 
 }

@@ -157,34 +157,27 @@ public class T1Conf {
 	 * 'hyper-thread' situation).
 	 */
 	private int proxyToServerWorkerThreads = CORE_NUM * 2;
-	/**
-	 * The max request size to be filtered in bytes, if the request size exceeds
-	 * this value, it won't be filtered in any way. TODO
-	 */
-	private int maxFilteringReqSize = 1024 * 1024;
-	/**
-	 * The max request buffer size to automatically collect the request data when
-	 * filtering the incoming requests from client. Requests which have a size less
-	 * than this value will be fully-collected as a 'whole-request', that means no
-	 * following chunks need to be processed. Those which larger than this value,
-	 * need to be processed in a chunked manner in user provided filter
-	 * implementations. TODO
-	 */
-	private int maxFullyCollectReqSize = 256 * 1024;
-	/**
-	 * The max response size to be filtered in bytes, if the response size exceeds
-	 * this value, it won't be filtered in any way. TODO
-	 */
-	private int maxFilteringRspSize = 10240 * 1024;
-	/**
-	 * The max response buffer size to automatically collect the response data when
-	 * filtering the out-going responses from server. Responses which have a size
-	 * less than this value will be fully-collected as a 'whole-response', that
-	 * means no following chunks need to be processed. Those which larger than this
-	 * value, need to be processed in a chunked manner in user provided filter
-	 * implementations. TODO
-	 */
-	private int maxFullyCollectRspSize = 256 * 1024;
+	// /**
+	// * The max request buffer size to automatically collect the request data when
+	// * filtering the incoming requests from client. Requests which have a size
+	// less
+	// * than this value will be fully-collected as a 'whole-request', that means no
+	// * following chunks need to be processed. Those which larger than this value,
+	// * need to be processed in a chunked manner in user provided filter
+	// * implementations.
+	// */
+	// private int maxFullyCollectReqSize = 256 * 1024;
+	// /**
+	// * The max response buffer size to automatically collect the response data
+	// when
+	// * filtering the out-going responses from server. Responses which have a size
+	// * less than this value will be fully-collected as a 'whole-response', that
+	// * means no following chunks need to be processed. Those which larger than
+	// this
+	// * value, need to be processed in a chunked manner in user provided filter
+	// * implementations.
+	// */
+	// private int maxFullyCollectRspSize = 256 * 1024;
 	/**
 	 * Specify the site mapping manager.
 	 */
@@ -232,38 +225,6 @@ public class T1Conf {
 
 	public void setSiteMappingManager(SiteMappingManager siteMappingManager) {
 		this.siteMappingManager = siteMappingManager;
-	}
-
-	public int getMaxFilteringReqSize() {
-		return maxFilteringReqSize;
-	}
-
-	public void setMaxFilteringReqSize(int maxFilteringReqSize) {
-		this.maxFilteringReqSize = maxFilteringReqSize;
-	}
-
-	public int getMaxFullyCollectReqSize() {
-		return maxFullyCollectReqSize;
-	}
-
-	public void setMaxFullyCollectReqSize(int maxFullyCollectReqSize) {
-		this.maxFullyCollectReqSize = maxFullyCollectReqSize;
-	}
-
-	public int getMaxFilteringRspSize() {
-		return maxFilteringRspSize;
-	}
-
-	public void setMaxFilteringRspSize(int maxFilteringRspSize) {
-		this.maxFilteringRspSize = maxFilteringRspSize;
-	}
-
-	public int getMaxFullyCollectRspSize() {
-		return maxFullyCollectRspSize;
-	}
-
-	public void setMaxFullyCollectRspSize(int maxFullyCollectRspSize) {
-		this.maxFullyCollectRspSize = maxFullyCollectRspSize;
 	}
 
 	public int getAcceptorThreads() {

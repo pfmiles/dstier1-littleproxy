@@ -10,6 +10,7 @@ import java.util.Calendar;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Date;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Properties;
@@ -22,9 +23,12 @@ import java.util.regex.Pattern;
 
 import com.github.pfmiles.dstier1.ExeOrder;
 import com.github.pfmiles.dstier1.RequestInfo;
+import com.github.pfmiles.dstier1.SiteMappingManager;
+import com.github.pfmiles.dstier1.T1Conf;
 import com.github.pfmiles.dstier1.T1Filter;
 import com.github.pfmiles.dstier1.impl.SortableFilterMethod;
 import com.github.pfmiles.dstier1.impl.TimedCacheItem;
+import com.github.pfmiles.dstier1.impl.ValueHolder;
 import com.google.common.base.Splitter;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
@@ -834,7 +838,7 @@ public class ProxyUtils {
 	 * 
 	 * @param fs
 	 *            all filters activated during this request
-	 * @return arranged req/rsp filtering methods
+	 * @return arranged <req, rsp> filtering methods
 	 */
 	public static Pair<List<SortableFilterMethod>, List<SortableFilterMethod>> buildSortedFilterMethods(
 			Set<T1Filter> fs) {
@@ -943,5 +947,91 @@ public class ProxyUtils {
 		Calendar c = Calendar.getInstance();
 		c.add(Calendar.MINUTE, 1);
 		return new TimedCacheItem<Method>(DUMMY, c.getTime());
+	}
+
+	/**
+	 * tell if this request need filtering
+	 * 
+	 * @param request
+	 *            the current incoming request
+	 * @param serverConf
+	 *            server config
+	 * @param perReqVals
+	 *            values shared during a request process
+	 * @return true/false
+	 */
+	public static boolean needFiltering(HttpRequest request, T1Conf serverConf, ValueHolder perReqVals) {
+		// 1.if no interests in site mapping, false
+		if (serverConf.getSiteMappingManager() == null) {
+			perReqVals.setNeedFiltering(false);
+			return false;
+		}
+		String fromSite = resolveFromSite(request, perReqVals);
+		String toSite = resolveToSite(serverConf.getSiteMappingManager(), fromSite, perReqVals);
+		if (StringUtils.isBlank(toSite)) {
+			perReqVals.setNeedFiltering(false);
+			return false;
+		}
+		// 2.if no filters will be activated, false
+		if (serverConf.getFiltersFactory() == null) {
+			perReqVals.setNeedFiltering(false);
+			return false;
+		}
+		Pair<List<SortableFilterMethod>, List<SortableFilterMethod>> filterMethods = perReqVals.getFilterMethods();
+		if (filterMethods == null) {
+			Collection<T1Filter> filters = serverConf.getFiltersFactory().buildFilters(new RequestInfo(request));
+			if (filters == null || filters.isEmpty()) {
+				filterMethods = ImmutablePair.of(null, null);
+				perReqVals.setFilterMethods(filterMethods);
+				perReqVals.setNeedFiltering(false);
+				return false;
+			}
+			// dedup and keep insertion order...
+			Set<T1Filter> fs = new LinkedHashSet<T1Filter>(filters);
+			// Pair<reqMethods, rspMethods>
+			filterMethods = ProxyUtils.buildSortedFilterMethods(fs);
+			if (filterMethods == null) {
+				filterMethods = ImmutablePair.of(null, null);
+				perReqVals.setFilterMethods(filterMethods);
+				perReqVals.setNeedFiltering(false);
+				return false;
+			}
+			perReqVals.setFilterMethods(filterMethods);
+		}
+		List<SortableFilterMethod> reqMethods = filterMethods.getLeft();
+		List<SortableFilterMethod> rspMethods = filterMethods.getRight();
+		if (reqMethods == null || reqMethods.isEmpty() || rspMethods == null || rspMethods.isEmpty()) {
+			perReqVals.setNeedFiltering(false);
+			return false;
+		}
+		if (reqMethods.size() != rspMethods.size()) {
+			throw new RuntimeException("It's impossible to get here, just for coding validity.");
+		}
+		perReqVals.setNeedFiltering(true);
+		return true;
+	}
+
+	public static String resolveToSite(SiteMappingManager siteMappingManager, String fromSite, ValueHolder perVals) {
+		String toSite = perVals.getToSite();
+		if (toSite == null) {
+			toSite = siteMappingManager.siteMapping(fromSite);
+			if (toSite == null) {
+				toSite = "";// prevents 'null-value-attacks'
+			}
+			perVals.setToSite(toSite);
+		}
+		return toSite;
+	}
+
+	public static String resolveFromSite(HttpRequest originalRequest, ValueHolder perVals) {
+		String fromSite = perVals.getFromSite();
+		if (fromSite == null) {
+			fromSite = ProxyUtils.extractSite(originalRequest);
+			if (fromSite == null) {
+				fromSite = "";// prevents 'null-value-attacks'
+			}
+			perVals.setFromSite(fromSite);
+		}
+		return fromSite;
 	}
 }

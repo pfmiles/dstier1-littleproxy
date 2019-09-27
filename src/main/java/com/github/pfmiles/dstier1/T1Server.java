@@ -19,17 +19,14 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
 import java.util.Arrays;
-import java.util.Collection;
-import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Set;
 
 import com.github.pfmiles.dstier1.impl.DsT1AdaptingHttpFilters;
 import com.github.pfmiles.dstier1.impl.SortableFilterMethod;
+import com.github.pfmiles.dstier1.impl.ValueHolder;
 import com.google.common.base.Strings;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http.HttpRequest;
-import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;
 import org.littleshoot.proxy.HttpFilters;
 import org.littleshoot.proxy.HttpFiltersSourceAdapter;
@@ -152,50 +149,17 @@ public class T1Server {
 		 */
 		bootstrap.withFiltersSource(new HttpFiltersSourceAdapter() {
 
-			@Override
-			public HttpFilters filterRequest(HttpRequest originalRequest) {
-				return this.filterRequest(originalRequest, null);
-			}
-
 			// only invoked at initial requests(not chunks)
 			@Override
-			public HttpFilters filterRequest(HttpRequest originalRequest, ChannelHandlerContext ctx) {
-				// 1.if no interests in site mapping, return null
-				if (conf.getSiteMappingManager() == null) {
+			public HttpFilters filterRequest(HttpRequest originalRequest, ChannelHandlerContext ctx,
+					ValueHolder perVals) {
+				if (ProxyUtils.needFiltering(originalRequest, conf, perVals)) {
+					Pair<List<SortableFilterMethod>, List<SortableFilterMethod>> methods = perVals.getFilterMethods();
+					return new DsT1AdaptingHttpFilters(ctx, originalRequest, methods.getLeft(), methods.getRight(),
+							conf.isFailFastOnFilterError(), perVals);
+				} else {
 					return null;
 				}
-				String fromSite = ProxyUtils.extractSite(originalRequest);
-				String toSite = conf.getSiteMappingManager().siteMapping(fromSite);
-				if (StringUtils.isBlank(toSite)) {
-					return null;
-				}
-				// 2.if no filters will be activated, return null
-				if (conf.getFiltersFactory() == null) {
-					return null;
-				}
-				Collection<T1Filter> filters = conf.getFiltersFactory().buildFilters(new RequestInfo(originalRequest));
-				if (filters == null || filters.isEmpty()) {
-					return null;
-				}
-				// dedup and keep insertion order...
-				Set<T1Filter> fs = new LinkedHashSet<T1Filter>(filters);
-				// Pair<reqMethods, rspMethods>
-				Pair<List<SortableFilterMethod>, List<SortableFilterMethod>> filterMethods = ProxyUtils
-						.buildSortedFilterMethods(fs);
-				if (filterMethods == null) {
-					return null;
-				}
-				List<SortableFilterMethod> reqMethods = filterMethods.getLeft();
-				List<SortableFilterMethod> rspMethods = filterMethods.getRight();
-				if (reqMethods == null || reqMethods.isEmpty() || rspMethods == null || rspMethods.isEmpty()) {
-					return null;
-				}
-				if (reqMethods.size() != rspMethods.size()) {
-					throw new RuntimeException("It's impossible to get here, just for coding validity.");
-				}
-				// 3.create adapting filters
-				return new DsT1AdaptingHttpFilters(ctx, originalRequest, fromSite, toSite, reqMethods, rspMethods,
-						conf.isFailFastOnFilterError());
 			}
 
 		});

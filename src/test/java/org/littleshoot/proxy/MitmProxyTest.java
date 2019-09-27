@@ -12,6 +12,8 @@ import java.util.HashSet;
 import java.util.Queue;
 import java.util.Set;
 
+import com.github.pfmiles.dstier1.impl.ValueHolder;
+
 import static org.hamcrest.Matchers.hasItem;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThat;
@@ -34,7 +36,7 @@ public class MitmProxyTest extends BaseProxyTest {
                 .withManInTheMiddle(new SelfSignedMitmManager())
                 .withFiltersSource(new HttpFiltersSourceAdapter() {
                     @Override
-                    public HttpFilters filterRequest(HttpRequest originalRequest) {
+                    public HttpFilters filterRequest(HttpRequest originalRequest, ValueHolder perVals) {
                         return new HttpFiltersAdapter(originalRequest) {
                             @Override
                             public HttpResponse clientToProxyRequest(

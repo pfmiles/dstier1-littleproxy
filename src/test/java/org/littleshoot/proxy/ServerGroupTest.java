@@ -19,6 +19,8 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
+import com.github.pfmiles.dstier1.impl.ValueHolder;
+
 import static org.junit.Assert.assertEquals;
 import static org.mockserver.model.HttpRequest.request;
 import static org.mockserver.model.HttpResponse.response;
@@ -89,7 +91,7 @@ public class ServerGroupTest {
                 .withPort(0)
                 .withFiltersSource(new HttpFiltersSourceAdapter() {
                     @Override
-                    public HttpFilters filterRequest(HttpRequest originalRequest) {
+                    public HttpFilters filterRequest(HttpRequest originalRequest, ValueHolder perVals) {
                         return new HttpFiltersAdapter(originalRequest) {
                             @Override
                             public io.netty.handler.codec.http.HttpResponse clientToProxyRequest(HttpObject httpObject) {

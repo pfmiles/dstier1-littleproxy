@@ -485,11 +485,6 @@ public class ProxyToServerConnection extends ProxyConnection<HttpResponse> {
         return initialRequest;
     }
 
-    @Override
-    protected HttpFilters getHttpFiltersFromProxyServer(HttpRequest httpRequest) {
-        return currentFilters;
-    }
-
     /***************************************************************************
      * Private Implementation
      **************************************************************************/
@@ -885,9 +880,9 @@ public class ProxyToServerConnection extends ProxyConnection<HttpResponse> {
         // Enable aggregation for filtering if necessary TODO modify to accommodate new features
         int numberOfBytesToBuffer = proxyServer.getFiltersSource()
                 .getMaximumResponseBufferSizeInBytes();
-        if (numberOfBytesToBuffer > 0) {
-            aggregateContentForFiltering(pipeline, numberOfBytesToBuffer);
-        }
+        //        if (numberOfBytesToBuffer > 0) {
+        aggregateContentForFiltering(pipeline, numberOfBytesToBuffer);
+        //        }
 
         pipeline.addLast("responseReadMonitor", responseReadMonitor);
         pipeline.addLast("requestWrittenMonitor", requestWrittenMonitor);

@@ -1,5 +1,6 @@
 package org.littleshoot.proxy;
 
+import com.github.pfmiles.dstier1.impl.ValueHolder;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http.FullHttpRequest;
 import io.netty.handler.codec.http.FullHttpResponse;
@@ -15,10 +16,11 @@ public interface HttpFiltersSource {
      * want to filter the request and/or its responses.
      * 
      * @param originalRequest
+     * @param perVals states kept during a single request/response progress
      * @return
      */
     HttpFilters filterRequest(HttpRequest originalRequest,
-            ChannelHandlerContext ctx);
+            ChannelHandlerContext ctx, ValueHolder perVals);
 
     /**
      * Indicate how many (if any) bytes to buffer for incoming

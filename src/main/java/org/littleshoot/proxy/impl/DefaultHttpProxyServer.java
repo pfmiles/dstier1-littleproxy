@@ -14,6 +14,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import javax.net.ssl.SSLEngine;
 
 import com.github.pfmiles.dstier1.SiteMappingManager;
+import com.github.pfmiles.dstier1.T1Conf;
 import io.netty.bootstrap.ChannelFactory;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.Channel;
@@ -119,7 +120,7 @@ public class DefaultHttpProxyServer implements HttpProxyServer {
     private final int maxHeaderSize;
     private final int maxChunkSize;
     private final boolean allowRequestsToOriginServer;
-    private final SiteMappingManager siteMappingManager;
+    private final T1Conf t1Conf;
 
     /**
      * The alias or pseudonym for this proxy, used when adding the Via header.
@@ -256,7 +257,7 @@ public class DefaultHttpProxyServer implements HttpProxyServer {
             int maxHeaderSize,
             int maxChunkSize,
             boolean allowRequestsToOriginServer,
-            SiteMappingManager siteMappingManager) {
+            T1Conf t1Conf) {
         this.serverGroup = serverGroup;
         this.transportProtocol = transportProtocol;
         this.requestedAddress = requestedAddress;
@@ -295,7 +296,7 @@ public class DefaultHttpProxyServer implements HttpProxyServer {
         this.maxHeaderSize = maxHeaderSize;
         this.maxChunkSize = maxChunkSize;
         this.allowRequestsToOriginServer = allowRequestsToOriginServer;
-        this.siteMappingManager = siteMappingManager;
+        this.t1Conf = t1Conf;
     }
 
     /**
@@ -414,7 +415,7 @@ public class DefaultHttpProxyServer implements HttpProxyServer {
                     maxHeaderSize,
                     maxChunkSize,
                     allowRequestsToOriginServer,
-                    siteMappingManager);
+                    t1Conf);
     }
 
     @Override
@@ -630,7 +631,7 @@ public class DefaultHttpProxyServer implements HttpProxyServer {
         private int maxHeaderSize = MAX_HEADER_SIZE_DEFAULT;
         private int maxChunkSize = MAX_CHUNK_SIZE_DEFAULT;
         private boolean allowRequestToOriginServer = false;
-        private SiteMappingManager siteMappingManager;
+        private T1Conf t1Conf;
 
         private DefaultHttpProxyServerBootstrap() {
         }
@@ -656,7 +657,7 @@ public class DefaultHttpProxyServer implements HttpProxyServer {
                 int maxHeaderSize,
                 int maxChunkSize,
                 boolean allowRequestToOriginServer,
-                SiteMappingManager siteMappingManager) {
+                T1Conf t1Conf) {
             this.serverGroup = serverGroup;
             this.transportProtocol = transportProtocol;
             this.requestedAddress = requestedAddress;
@@ -682,7 +683,7 @@ public class DefaultHttpProxyServer implements HttpProxyServer {
         	this.maxHeaderSize = maxHeaderSize;
         	this.maxChunkSize = maxChunkSize;
         	this.allowRequestToOriginServer = allowRequestToOriginServer;
-        	this.siteMappingManager = siteMappingManager;
+        	this.t1Conf = t1Conf;
         }
 
         private DefaultHttpProxyServerBootstrap(Properties props) {
@@ -913,7 +914,7 @@ public class DefaultHttpProxyServer implements HttpProxyServer {
                     idleConnectionTimeout, activityTrackers, connectTimeout,
                     serverResolver, readThrottleBytesPerSecond, writeThrottleBytesPerSecond,
                     localAddress, proxyAlias, maxInitialLineLength, maxHeaderSize, maxChunkSize,
-                    allowRequestToOriginServer, siteMappingManager);
+                    allowRequestToOriginServer, t1Conf);
         }
 
         private InetSocketAddress determineListenAddress() {
@@ -932,12 +933,12 @@ public class DefaultHttpProxyServer implements HttpProxyServer {
 
 		@Override
 		public HttpProxyServerBootstrap withSiteMappingManager(SiteMappingManager siteMappingManager) {
-			this.siteMappingManager = siteMappingManager;
+			this.t1Conf.setSiteMappingManager(siteMappingManager);
 			return this;
 		}
     }
 
-	public SiteMappingManager getSiteMappingManager() {
-		return this.siteMappingManager;
+	public T1Conf getT1Conf() {
+		return this.t1Conf;
 	}
 }

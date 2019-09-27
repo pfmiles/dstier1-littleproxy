@@ -52,6 +52,7 @@ import java.net.InetSocketAddress;
  * the following order:
  * <ol>
  * <li>clientToProxyRequest</li>
+ * <li>proxyToServerSiteMapping</li>
  * <li>proxyToServerConnectionQueued</li>
  * <li>proxyToServerResolutionStarted</li>
  * <li>proxyToServerResolutionSucceeded</li>
@@ -65,7 +66,7 @@ import java.net.InetSocketAddress;
  * <li>serverToProxyResponseReceiving</li>
  * <li>serverToProxyResponse (can be multiple if chuncked)</li>
  * <li>serverToProxyResponseReceived</li>
- * <li>proxyToClientResponse</li>
+ * <li>proxyToClientResponse (can be multiple if chuncked)</li>
  * </ol>
  */
 public interface HttpFilters {

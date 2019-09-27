@@ -2,6 +2,8 @@ package org.littleshoot.proxy;
 
 import java.net.InetSocketAddress;
 
+import com.github.pfmiles.dstier1.T1Conf;
+
 /**
  * Interface for the top-level proxy server class.
  */
@@ -64,4 +66,6 @@ public interface HttpProxyServer {
      * @param writeThrottleBytesPerSecond
      */
     void setThrottle(long readThrottleBytesPerSecond, long writeThrottleBytesPerSecond);
+    
+    T1Conf getT1Conf();
 }

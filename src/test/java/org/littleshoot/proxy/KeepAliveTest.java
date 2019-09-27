@@ -1,5 +1,11 @@
 package org.littleshoot.proxy;
 
+import java.io.IOException;
+import java.net.Socket;
+import java.util.Locale;
+import java.util.concurrent.TimeUnit;
+
+import com.github.pfmiles.dstier1.impl.ValueHolder;
 import io.netty.handler.codec.http.DefaultFullHttpResponse;
 import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpObject;
@@ -16,12 +22,10 @@ import org.mockserver.integration.ClientAndServer;
 import org.mockserver.matchers.Times;
 import org.mockserver.model.ConnectionOptions;
 
-import java.io.IOException;
-import java.net.Socket;
-import java.util.Locale;
-import java.util.concurrent.TimeUnit;
-
-import static org.hamcrest.Matchers.*;
+import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.endsWith;
+import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.startsWith;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
@@ -248,7 +252,7 @@ public class KeepAliveTest {
 
         HttpFiltersSource filtersSource = new HttpFiltersSourceAdapter() {
             @Override
-            public HttpFilters filterRequest(HttpRequest originalRequest) {
+            public HttpFilters filterRequest(HttpRequest originalRequest, ValueHolder perVals) {
                 return new HttpFiltersAdapter(originalRequest) {
                     @Override
                     public HttpResponse clientToProxyRequest(HttpObject httpObject) {
@@ -306,7 +310,7 @@ public class KeepAliveTest {
 
         HttpFiltersSource filtersSource = new HttpFiltersSourceAdapter() {
             @Override
-            public HttpFilters filterRequest(HttpRequest originalRequest) {
+            public HttpFilters filterRequest(HttpRequest originalRequest, ValueHolder perVals) {
                 return new HttpFiltersAdapter(originalRequest) {
                     @Override
                     public HttpResponse clientToProxyRequest(HttpObject httpObject) {
