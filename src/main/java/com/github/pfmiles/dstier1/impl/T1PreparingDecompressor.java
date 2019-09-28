@@ -37,11 +37,6 @@ import org.littleshoot.proxy.impl.ProxyUtils;
  *
  */
 public class T1PreparingDecompressor extends HttpContentDecompressor {
-	/**
-	 * is processing in progress for the current request, it's the same object as
-	 * the one in ClientToProxyConnection.
-	 */
-	private volatile ValueHolder vals;
 
 	@Override
 	protected void decode(ChannelHandlerContext ctx, HttpObject msg, List<Object> out) throws Exception {
@@ -65,9 +60,9 @@ public class T1PreparingDecompressor extends HttpContentDecompressor {
 			 */
 			ClientToProxyConnection ctp = (ClientToProxyConnection) ctx.pipeline().get("handler");
 			T1Conf serverConf = ctp.getProxyServer().getT1Conf();
-			this.vals = new ValueHolder();
-			ctp.setPerReqVals(this.vals);
-			if (ProxyUtils.needFiltering(request, serverConf, this.vals)) {
+			ValueHolder vals = new ValueHolder();
+			ctp.setPerReqVals(vals);
+			if (ProxyUtils.needFiltering(request, serverConf, vals)) {
 				super.decode(ctx, msg, out);
 			} else {
 				out.add(ReferenceCountUtil.retain(msg));
@@ -77,9 +72,7 @@ public class T1PreparingDecompressor extends HttpContentDecompressor {
 			 * 2.otherwise invoke super.decode to continue handling the content if is in a
 			 * process of request
 			 */
-			if (vals == null) {
-				vals = resolvePerReqVals(ctx, msg);
-			}
+			ValueHolder vals = resolvePerReqVals(ctx, msg);
 			if (vals != null && vals.getNeedFiltering() != null && vals.getNeedFiltering()) {
 				super.decode(ctx, msg, out);
 			} else {

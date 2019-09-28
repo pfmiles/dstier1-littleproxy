@@ -3,6 +3,7 @@
  */
 package com.github.pfmiles.dstier1;
 
+import org.littleshoot.proxy.impl.ProxyUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -28,6 +29,17 @@ public class ServerInMain {
 		// ret.setSiteMappingManager(siteMappingManager);
 		// ret.setFiltersFactory(filtersFactory);
 		ret.setIdleConnectionTimeout(3600);
+		ret.setSiteMappingManager(new SiteMappingManager() {
+
+			@Override
+			protected String doSiteMapping(String origSite) {
+				if (ProxyUtils.siteEquals("http://abc.com", origSite)) {
+					return "http://bumonitor.stable.alipay.net:8080";
+				} else {
+					return null;
+				}
+			}
+		});
 		return ret;
 	}
 

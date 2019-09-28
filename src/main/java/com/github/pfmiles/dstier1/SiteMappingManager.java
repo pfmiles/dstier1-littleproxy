@@ -36,6 +36,10 @@ public abstract class SiteMappingManager {
 	/**
 	 * Specify with the original site, returns the mapping result or null. User
 	 * should implement this method for reasonable mapping logic.
+	 * <p>
+	 * Note: ProxyUtils.siteEquals function is provided to help implementing. It
+	 * tells whether two sites are the same in business definition.
+	 * </p>
 	 * 
 	 * @param origSite
 	 *            the original site, 'http://www.a.com:8080' for example
