@@ -31,14 +31,15 @@ import org.slf4j.LoggerFactory;
  *
  */
 public abstract class SiteMappingManager {
+
 	private static final Logger logger = LoggerFactory.getLogger(SiteMappingManager.class);
 
 	/**
 	 * Specify with the original site, returns the mapping result or null. User
 	 * should implement this method for reasonable mapping logic.
 	 * <p>
-	 * Note: ProxyUtils.siteEquals function is provided to help implementing. It
-	 * tells whether two sites are the same in business definition.
+	 * Note: T1Utils.siteEquals function is provided to help implementing. It tells
+	 * whether two sites are the same in business definition.
 	 * </p>
 	 * 
 	 * @param origSite

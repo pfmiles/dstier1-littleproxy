@@ -104,7 +104,7 @@ public class ProxyUtils {
 	private static Pattern HTTP_PREFIX = Pattern.compile("^https?://.*", Pattern.CASE_INSENSITIVE);
 
 	// Pattern of a valid 'site'.
-	private static Pattern SITE_PATTERN = Pattern.compile("^https?://[a-zA-Z\\d\\-]+(\\.[a-zA-Z\\d\\-]+)*(:\\d{1,5})?$",
+	public static Pattern SITE_PATTERN = Pattern.compile("^https?://[a-zA-Z\\d\\-]+(\\.[a-zA-Z\\d\\-]+)*(:\\d{1,5})?$",
 			Pattern.CASE_INSENSITIVE);
 	// static method cache of filters
 	private static Cache<Pair<Class<? extends T1Filter>, String>, TimedCacheItem<Method>> filterMethodsCache = CacheBuilder
@@ -981,7 +981,8 @@ public class ProxyUtils {
 			}
 			Pair<List<SortableFilterMethod>, List<SortableFilterMethod>> filterMethods = perReqVals.getFilterMethods();
 			if (filterMethods == null) {
-				Collection<T1Filter> filters = serverConf.getFiltersFactory().buildFilters(new RequestInfo(request));
+				RequestInfo roReq = new RequestInfo(request);
+				Collection<T1Filter> filters = serverConf.getFiltersFactory().buildFilters(roReq);
 				if (filters == null || filters.isEmpty()) {
 					filterMethods = ImmutablePair.of(null, null);
 					perReqVals.setFilterMethods(filterMethods);
@@ -990,6 +991,8 @@ public class ProxyUtils {
 				}
 				// dedup and keep insertion order...
 				Set<T1Filter> fs = new LinkedHashSet<T1Filter>(filters);
+				// remove inactive filters
+				fs.removeIf(f -> !f.active(roReq));
 				// Pair<reqMethods, rspMethods>
 				filterMethods = ProxyUtils.buildSortedFilterMethods(fs);
 				if (filterMethods == null) {
@@ -1039,74 +1042,4 @@ public class ProxyUtils {
 		return fromSite;
 	}
 
-	/**
-	 * Convenience method to tell if the specified two sites are the same
-	 * 
-	 * @param site1
-	 * @param site2
-	 * @return true if the two sites are the same, 'http://a.com' and
-	 *         'http://a.com:80' for example, false otherwise.
-	 */
-	public static boolean siteEquals(String site1, String site2) {
-		if (site1 == null || !SITE_PATTERN.matcher(site1).matches()) {
-			throw new IllegalArgumentException("Site: '" + site1 + "' is invalid.");
-		}
-		if (site2 == null || !SITE_PATTERN.matcher(site2).matches()) {
-			throw new IllegalArgumentException("Site: '" + site2 + "' is invalid.");
-		}
-		site1 = site1.toLowerCase();
-		site2 = site2.toLowerCase();
-
-		String proto1 = StringUtils.substringBefore(site1, "://");
-		String proto2 = StringUtils.substringBefore(site2, "://");
-		if (!proto1.equals(proto2)) {
-			return false;
-		}
-
-		String domain1 = null;
-		String noPro1 = StringUtils.substringAfter(site1, "://");
-		if (noPro1.contains(":")) {
-			domain1 = StringUtils.substringBefore(noPro1, ":");
-		} else {
-			domain1 = noPro1;
-		}
-		String domain2 = null;
-		String noPro2 = StringUtils.substringAfter(site2, "://");
-		if (noPro2.contains(":")) {
-			domain2 = StringUtils.substringBefore(noPro2, ":");
-		} else {
-			domain2 = noPro2;
-		}
-		if (!domain1.equals(domain2)) {
-			return false;
-		}
-
-		int port1 = -1;
-		if (noPro1.contains(":")) {
-			port1 = Integer.parseInt(StringUtils.substringAfter(noPro1, ":"));
-		} else {
-			// well-known default ports for http/https
-			if ("http".equals(proto1)) {
-				port1 = 80;
-			} else {
-				port1 = 443;
-			}
-		}
-		int port2 = -1;
-		if (noPro2.contains(":")) {
-			port2 = Integer.parseInt(StringUtils.substringAfter(noPro2, ":"));
-		} else {
-			// well-known default ports for http/https
-			if ("http".equals(proto2)) {
-				port2 = 80;
-			} else {
-				port2 = 443;
-			}
-		}
-		if (port1 != port2) {
-			return false;
-		}
-
-		return true;
-	}
 }

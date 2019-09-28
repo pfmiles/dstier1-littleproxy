@@ -86,11 +86,6 @@ public class HeaderInfo extends TreeMap<String, String> {
 	}
 
 	@Override
-	public String put(String key, String value) {
-		throw new UnsupportedOperationException("read only");
-	}
-
-	@Override
 	public void clear() {
 		throw new UnsupportedOperationException("read only");
 	}

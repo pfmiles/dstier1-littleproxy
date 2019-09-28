@@ -3,11 +3,20 @@
  */
 package com.github.pfmiles.dstier1;
 
-import org.littleshoot.proxy.impl.ProxyUtils;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
+
+import com.github.pfmiles.dstier1.impl.T1Utils;
+import io.netty.handler.codec.http.HttpMethod;
+import io.netty.handler.codec.http.HttpObject;
+import io.netty.handler.codec.http.HttpResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
+ * For development debugging...
+ * 
  * @author pf-miles
  *
  */
@@ -33,11 +42,39 @@ public class ServerInMain {
 
 			@Override
 			protected String doSiteMapping(String origSite) {
-				if (ProxyUtils.siteEquals("http://abc.com", origSite)) {
+				if (T1Utils.siteEquals("http://abc.com", origSite)) {
 					return "http://bumonitor.stable.alipay.net:8080";
 				} else {
 					return null;
 				}
+			}
+		});
+		ret.setFiltersFactory(new FiltersFactory() {
+
+			@Override
+			public Collection<T1Filter> buildFilters(RequestInfo reqInfo) {
+				List<T1Filter> fs = new ArrayList<>();
+				fs.add(new T1Filter() {
+
+					@Override
+					public boolean active(RequestInfo req) {
+						return HttpMethod.GET.equals(req.getMethod());
+					}
+
+					@Override
+					public HttpResponse onRequesting(HttpObject httpObj) {
+						logger.info("On requesting: " + httpObj.toString());
+						return null;
+					}
+
+					@Override
+					@ExeOrder(999)
+					public HttpObject onResponding(HttpObject httpObj) {
+						logger.info("On responding: " + httpObj.toString());
+						return httpObj;
+					}
+				});
+				return fs;
 			}
 		});
 		return ret;

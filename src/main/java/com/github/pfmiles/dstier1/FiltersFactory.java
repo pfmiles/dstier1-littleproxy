@@ -35,8 +35,9 @@ public interface FiltersFactory {
 	 * 
 	 * @param reqInfo
 	 *            read-only request info
-	 * @return new filter instances, thay will be used in a thread-safe-per-request
-	 *         env, and can keep states.
+	 * @return new filter instances, will be used in a thread-safe-per-request env,
+	 *         so they can keep states. <b>(* Note that this method MUST return
+	 *         brand-new filter instances when every time it is invoked *)</b>
 	 */
 	Collection<T1Filter> buildFilters(RequestInfo reqInfo);
 }
