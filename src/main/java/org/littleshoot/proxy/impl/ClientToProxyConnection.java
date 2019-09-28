@@ -460,6 +460,7 @@ public class ClientToProxyConnection extends ProxyConnection<HttpRequest> {
         httpObject = filters.serverToProxyResponse(httpObject);
         if (httpObject == null) {
             forceDisconnect(serverConnection);
+            this.perReqVals.setNeedFiltering(false);
             return;
         }
 
@@ -494,6 +495,7 @@ public class ClientToProxyConnection extends ProxyConnection<HttpRequest> {
         httpObject = filters.proxyToClientResponse(httpObject);
         if (httpObject == null) {
             forceDisconnect(serverConnection);
+            this.perReqVals.setNeedFiltering(false);
             return;
         }
 
@@ -1296,6 +1298,9 @@ public class ClientToProxyConnection extends ProxyConnection<HttpRequest> {
         this.currentRequest = null;
 
         HttpResponse filteredResponse = (HttpResponse) currentFilters.proxyToClientShortCircuitResponse(httpResponse);
+
+        this.perReqVals.setNeedFiltering(false); // disable following processing if there is
+
         if (filteredResponse == null) {
             disconnect();
             return false;

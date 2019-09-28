@@ -18,12 +18,14 @@ package com.github.pfmiles.dstier1.impl;
 import java.util.List;
 
 import com.github.pfmiles.dstier1.T1Conf;
+import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http.HttpContentDecompressor;
 import io.netty.handler.codec.http.HttpObject;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.util.ReferenceCountUtil;
 import org.littleshoot.proxy.impl.ClientToProxyConnection;
+import org.littleshoot.proxy.impl.ProxyToServerConnection;
 import org.littleshoot.proxy.impl.ProxyUtils;
 
 /**
@@ -36,9 +38,10 @@ import org.littleshoot.proxy.impl.ProxyUtils;
  */
 public class T1PreparingDecompressor extends HttpContentDecompressor {
 	/**
-	 * is processing in progress for the current request
+	 * is processing in progress for the current request, it's the same object as
+	 * the one in ClientToProxyConnection.
 	 */
-	private volatile boolean processing;
+	private volatile ValueHolder vals;
 
 	@Override
 	protected void decode(ChannelHandlerContext ctx, HttpObject msg, List<Object> out) throws Exception {
@@ -62,21 +65,22 @@ public class T1PreparingDecompressor extends HttpContentDecompressor {
 			 */
 			ClientToProxyConnection ctp = (ClientToProxyConnection) ctx.pipeline().get("handler");
 			T1Conf serverConf = ctp.getProxyServer().getT1Conf();
-			ValueHolder perReqVals = new ValueHolder();
-			ctp.setPerReqVals(perReqVals);
-			if (ProxyUtils.needFiltering(request, serverConf, perReqVals)) {
-				this.processing = true;
+			this.vals = new ValueHolder();
+			ctp.setPerReqVals(this.vals);
+			if (ProxyUtils.needFiltering(request, serverConf, this.vals)) {
 				super.decode(ctx, msg, out);
 			} else {
-				this.processing = false;
 				out.add(ReferenceCountUtil.retain(msg));
 			}
 		} else {
 			/*
-			 * 2.otherwise invoke super.decode to continue decompress the content if is in a
-			 * process of decompression
+			 * 2.otherwise invoke super.decode to continue handling the content if is in a
+			 * process of request
 			 */
-			if (processing) {
+			if (vals == null) {
+				vals = resolvePerReqVals(ctx, msg);
+			}
+			if (vals != null && vals.getNeedFiltering() != null && vals.getNeedFiltering()) {
 				super.decode(ctx, msg, out);
 			} else {
 				out.add(ReferenceCountUtil.retain(msg));
@@ -84,4 +88,19 @@ public class T1PreparingDecompressor extends HttpContentDecompressor {
 		}
 	}
 
+	/**
+	 * Get perReqVals in ClientToProxyConnection
+	 */
+	private ValueHolder resolvePerReqVals(ChannelHandlerContext ctx, HttpObject msg) {
+		ChannelHandler handler = ctx.pipeline().get("handler");
+		if (handler instanceof ClientToProxyConnection) {
+			// in clientToProxyConnection pipeline
+			ClientToProxyConnection ctp = (ClientToProxyConnection) handler;
+			return ctp.getPerReqVals();
+		} else {
+			// in proxyToServerConnection pipeline
+			ProxyToServerConnection pts = (ProxyToServerConnection) handler;
+			return pts.getClientConnection().getPerReqVals();
+		}
+	}
 }

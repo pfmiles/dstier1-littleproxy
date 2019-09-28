@@ -25,6 +25,9 @@ public class ServerInMain {
 		ret.setPort(8080);
 		ret.setNic(null);
 		ret.setLocalOnly(false);
+		// ret.setSiteMappingManager(siteMappingManager);
+		// ret.setFiltersFactory(filtersFactory);
+		ret.setIdleConnectionTimeout(3600);
 		return ret;
 	}
 

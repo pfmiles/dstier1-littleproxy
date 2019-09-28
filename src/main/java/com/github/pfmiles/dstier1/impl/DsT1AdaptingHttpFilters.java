@@ -52,18 +52,6 @@ public class DsT1AdaptingHttpFilters extends HttpFiltersAdapter {
 	 */
 	private boolean failFastOnFilterError = false;
 
-	// /**
-	// * @param originalRequest
-	// * the request obj
-	// * @param ctx
-	// * a concept from netty, enables this handler could notify other
-	// * handlers or even modify the underlying pipline dynamically
-	// */
-	// public DsT1AdaptingHttpFilters(HttpRequest originalRequest,
-	// ChannelHandlerContext ctx) {
-	// super(originalRequest, ctx);
-	// }
-
 	public DsT1AdaptingHttpFilters(ChannelHandlerContext ctx, HttpRequest originalRequest,
 			List<SortableFilterMethod> reqMethods, List<SortableFilterMethod> rspMethods, boolean failFastOnFilterError,
 			ValueHolder perReqVals) {
@@ -115,7 +103,6 @@ public class DsT1AdaptingHttpFilters extends HttpFiltersAdapter {
 					// ignore and continue...
 					logger.error("Filter method: '" + m.getMethod()
 							+ "' throws exception, ignored and continue executing following ones.", e);
-					return null;
 				}
 			}
 		}

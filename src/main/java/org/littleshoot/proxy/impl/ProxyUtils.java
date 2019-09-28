@@ -961,54 +961,58 @@ public class ProxyUtils {
 	 * @return true/false
 	 */
 	public static boolean needFiltering(HttpRequest request, T1Conf serverConf, ValueHolder perReqVals) {
-		// 1.if no interests in site mapping, false
-		if (serverConf.getSiteMappingManager() == null) {
-			perReqVals.setNeedFiltering(false);
-			return false;
-		}
-		String fromSite = resolveFromSite(request, perReqVals);
-		String toSite = resolveToSite(serverConf.getSiteMappingManager(), fromSite, perReqVals);
-		if (StringUtils.isBlank(toSite)) {
-			perReqVals.setNeedFiltering(false);
-			return false;
-		}
-		// 2.if no filters will be activated, false
-		if (serverConf.getFiltersFactory() == null) {
-			perReqVals.setNeedFiltering(false);
-			return false;
-		}
-		Pair<List<SortableFilterMethod>, List<SortableFilterMethod>> filterMethods = perReqVals.getFilterMethods();
-		if (filterMethods == null) {
-			Collection<T1Filter> filters = serverConf.getFiltersFactory().buildFilters(new RequestInfo(request));
-			if (filters == null || filters.isEmpty()) {
-				filterMethods = ImmutablePair.of(null, null);
-				perReqVals.setFilterMethods(filterMethods);
+		Boolean nf = perReqVals.getNeedFiltering();
+		if (nf == null) {
+			// 1.if no interests in site mapping, false
+			if (serverConf.getSiteMappingManager() == null) {
 				perReqVals.setNeedFiltering(false);
 				return false;
 			}
-			// dedup and keep insertion order...
-			Set<T1Filter> fs = new LinkedHashSet<T1Filter>(filters);
-			// Pair<reqMethods, rspMethods>
-			filterMethods = ProxyUtils.buildSortedFilterMethods(fs);
+			String fromSite = resolveFromSite(request, perReqVals);
+			String toSite = resolveToSite(serverConf.getSiteMappingManager(), fromSite, perReqVals);
+			if (StringUtils.isBlank(toSite)) {
+				perReqVals.setNeedFiltering(false);
+				return false;
+			}
+			// 2.if no filters will be activated, false
+			if (serverConf.getFiltersFactory() == null) {
+				perReqVals.setNeedFiltering(false);
+				return false;
+			}
+			Pair<List<SortableFilterMethod>, List<SortableFilterMethod>> filterMethods = perReqVals.getFilterMethods();
 			if (filterMethods == null) {
-				filterMethods = ImmutablePair.of(null, null);
+				Collection<T1Filter> filters = serverConf.getFiltersFactory().buildFilters(new RequestInfo(request));
+				if (filters == null || filters.isEmpty()) {
+					filterMethods = ImmutablePair.of(null, null);
+					perReqVals.setFilterMethods(filterMethods);
+					perReqVals.setNeedFiltering(false);
+					return false;
+				}
+				// dedup and keep insertion order...
+				Set<T1Filter> fs = new LinkedHashSet<T1Filter>(filters);
+				// Pair<reqMethods, rspMethods>
+				filterMethods = ProxyUtils.buildSortedFilterMethods(fs);
+				if (filterMethods == null) {
+					filterMethods = ImmutablePair.of(null, null);
+					perReqVals.setFilterMethods(filterMethods);
+					perReqVals.setNeedFiltering(false);
+					return false;
+				}
 				perReqVals.setFilterMethods(filterMethods);
+			}
+			List<SortableFilterMethod> reqMethods = filterMethods.getLeft();
+			List<SortableFilterMethod> rspMethods = filterMethods.getRight();
+			if (reqMethods == null || reqMethods.isEmpty() || rspMethods == null || rspMethods.isEmpty()) {
 				perReqVals.setNeedFiltering(false);
 				return false;
 			}
-			perReqVals.setFilterMethods(filterMethods);
+			if (reqMethods.size() != rspMethods.size()) {
+				throw new RuntimeException("It's impossible to get here, just for coding validity.");
+			}
+			perReqVals.setNeedFiltering(true);
+			return true;
 		}
-		List<SortableFilterMethod> reqMethods = filterMethods.getLeft();
-		List<SortableFilterMethod> rspMethods = filterMethods.getRight();
-		if (reqMethods == null || reqMethods.isEmpty() || rspMethods == null || rspMethods.isEmpty()) {
-			perReqVals.setNeedFiltering(false);
-			return false;
-		}
-		if (reqMethods.size() != rspMethods.size()) {
-			throw new RuntimeException("It's impossible to get here, just for coding validity.");
-		}
-		perReqVals.setNeedFiltering(true);
-		return true;
+		return nf;
 	}
 
 	public static String resolveToSite(SiteMappingManager siteMappingManager, String fromSite, ValueHolder perVals) {

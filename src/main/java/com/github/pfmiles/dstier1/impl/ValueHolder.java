@@ -39,7 +39,7 @@ public class ValueHolder {
 	/**
 	 * tell if the current request/response needs filtering
 	 */
-	private boolean needFiltering;
+	private Boolean needFiltering;
 	/**
 	 * filter methods for this request process
 	 */
@@ -53,11 +53,11 @@ public class ValueHolder {
 		this.filterMethods = filterMethods;
 	}
 
-	public boolean isNeedFiltering() {
+	public Boolean getNeedFiltering() {
 		return needFiltering;
 	}
 
-	public void setNeedFiltering(boolean needFiltering) {
+	public void setNeedFiltering(Boolean needFiltering) {
 		this.needFiltering = needFiltering;
 	}
 

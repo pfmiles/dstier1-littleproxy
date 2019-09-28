@@ -877,7 +877,7 @@ public class ProxyToServerConnection extends ProxyConnection<HttpResponse> {
                 proxyServer.getMaxHeaderSize(),
                 proxyServer.getMaxChunkSize()));
 
-        // Enable aggregation for filtering if necessary TODO modify to accommodate new features
+        // Enable aggregation for filtering if necessary TODO pf_miles: modify to accommodate new features
         int numberOfBytesToBuffer = proxyServer.getFiltersSource()
                 .getMaximumResponseBufferSizeInBytes();
         //        if (numberOfBytesToBuffer > 0) {
@@ -1029,5 +1029,9 @@ public class ProxyToServerConnection extends ProxyConnection<HttpResponse> {
             }
         }
     };
+
+	public ClientToProxyConnection getClientConnection() {
+		return clientConnection;
+	}
 
 }
