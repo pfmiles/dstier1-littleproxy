@@ -124,6 +124,10 @@ public class T1Server {
 
 		bootstrap.withThrottling(conf.getReadThrottleBytesPerSecond(), conf.getWriteThrottleBytesPerSecond());
 		bootstrap.withAllowRequestToOriginServer(conf.isReverseMode());
+		// site mapping is also a white-list mechanism when reverse mode
+		if (conf.isReverseMode() && conf.getSiteMappingManager() == null) {
+			throw new IllegalArgumentException("When reverse mode, siteMappingManager must be specified.");
+		}
 
 		String viaPseudo = conf.getViaPseudonym();
 		if (!Strings.isNullOrEmpty(viaPseudo)) {

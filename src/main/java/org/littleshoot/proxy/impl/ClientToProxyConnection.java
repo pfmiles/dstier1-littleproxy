@@ -261,7 +261,7 @@ public class ClientToProxyConnection extends ProxyConnection<HttpRequest> {
         // if origin-form requests are not explicitly enabled, short-circuit requests that treat the proxy as the
         // origin server, to avoid infinite loops
         if (!proxyServer.isAllowRequestsToOriginServer() && isRequestToOriginServer(httpRequest)) {
-            boolean keepAlive = writeBadRequest(httpRequest);
+            boolean keepAlive = writeBadRequest(httpRequest, "origin-form requests are not allowed");
             if (keepAlive) {
                 return AWAITING_INITIAL;
             } else {
@@ -269,6 +269,28 @@ public class ClientToProxyConnection extends ProxyConnection<HttpRequest> {
             }
         }
 
+        // when reverse mode, site mapping is a must, a.k.a siteMapping as a white-list mechanism
+        if (this.proxyServer.getT1Conf().isReverseMode()) {
+        	if (this.proxyServer.getT1Conf().getSiteMappingManager() == null) {
+        		boolean keepAlive = writeBadGateway(httpRequest, "no site mapping configured for the reverse proxy, please contact the admin");
+                if (keepAlive) {
+                    return AWAITING_INITIAL;
+                } else {
+                    return DISCONNECT_REQUESTED;
+                }
+        	} else {
+        		String fromSite = ProxyUtils.resolveFromSite(httpRequest, this.perReqVals);
+        		String toSite = ProxyUtils.resolveToSite(this.proxyServer.getT1Conf().getSiteMappingManager(), fromSite, this.perReqVals);
+        		if (StringUtils.isBlank(toSite)) {
+        			boolean keepAlive = writeBadRequest(httpRequest, "no mapping found for site '" + fromSite + "', forbbiden");
+                    if (keepAlive) {
+                        return AWAITING_INITIAL;
+                    } else {
+                        return DISCONNECT_REQUESTED;
+                    }
+        		}
+        	}
+        }
         // do site mapping when manager exists
         if (this.proxyServer.getT1Conf().getSiteMappingManager() != null) {
         	siteMapping(httpRequest);
@@ -280,8 +302,9 @@ public class ClientToProxyConnection extends ProxyConnection<HttpRequest> {
         LOG.debug("Ensuring that hostAndPort are available in {}",
                 httpRequest.getUri());
         if (serverHostAndPort == null || StringUtils.isBlank(serverHostAndPort)) {
-            LOG.warn("No host and port found in {}", httpRequest.getUri());
-            boolean keepAlive = writeBadGateway(httpRequest);
+        	String errMsg = "No host and port found in " + httpRequest.getUri();
+            LOG.warn(errMsg);
+            boolean keepAlive = writeBadGateway(httpRequest, errMsg);
             if (keepAlive) {
                 return AWAITING_INITIAL;
             } else {
@@ -317,7 +340,7 @@ public class ClientToProxyConnection extends ProxyConnection<HttpRequest> {
                         globalTrafficShapingHandler);
                 if (currentServerConnection == null) {
                     LOG.debug("Unable to create server connection, probably no chained proxies available");
-                    boolean keepAlive = writeBadGateway(httpRequest);
+                    boolean keepAlive = writeBadGateway(httpRequest, "proxy to server connection creation failed");
                     resumeReading();
                     if (keepAlive) {
                         return AWAITING_INITIAL;
@@ -329,8 +352,9 @@ public class ClientToProxyConnection extends ProxyConnection<HttpRequest> {
                 serverConnectionsByHostAndPort.put(serverHostAndPort,
                         currentServerConnection);
             } catch (UnknownHostException uhe) {
-                LOG.info("Bad Host {}", httpRequest.getUri());
-                boolean keepAlive = writeBadGateway(httpRequest);
+            	String errMsg = "Bad Host " + httpRequest.getUri();
+                LOG.info(errMsg);
+                boolean keepAlive = writeBadGateway(httpRequest, errMsg);
                 resumeReading();
                 if (keepAlive) {
                     return AWAITING_INITIAL;
@@ -460,7 +484,7 @@ public class ClientToProxyConnection extends ProxyConnection<HttpRequest> {
         httpObject = filters.serverToProxyResponse(httpObject);
         if (httpObject == null) {
             forceDisconnect(serverConnection);
-            this.perReqVals.setNeedFiltering(false);
+            this.perReqVals.setNeedFiltering(Boolean.FALSE);
             return;
         }
 
@@ -659,7 +683,7 @@ public class ClientToProxyConnection extends ProxyConnection<HttpRequest> {
         serverConnection.disconnect();
         this.serverConnectionsByHostAndPort.remove(serverConnection.getServerHostAndPort());
 
-        boolean keepAlive = writeBadGateway(initialRequest);
+        boolean keepAlive = writeBadGateway(initialRequest, "connection to upstream server failed");
         if (keepAlive) {
             become(AWAITING_INITIAL);
         } else {
@@ -1230,8 +1254,8 @@ public class ClientToProxyConnection extends ProxyConnection<HttpRequest> {
      * @param httpRequest the HttpRequest that is resulting in the Bad Gateway response
      * @return true if the connection will be kept open, or false if it will be disconnected
      */
-    private boolean writeBadGateway(HttpRequest httpRequest) {
-        String body = "Bad Gateway: " + httpRequest.getUri();
+    private boolean writeBadGateway(HttpRequest httpRequest, String reason) {
+        String body = "Bad Gateway: " + httpRequest.getUri() + ", " + reason + ".";
         FullHttpResponse response = ProxyUtils.createFullHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.BAD_GATEWAY, body);
 
         if (ProxyUtils.isHEAD(httpRequest)) {
@@ -1249,8 +1273,8 @@ public class ClientToProxyConnection extends ProxyConnection<HttpRequest> {
      *
      * @return true if the connection will be kept open, or false if it will be disconnected
      */
-    private boolean writeBadRequest(HttpRequest httpRequest) {
-        String body = "Bad Request to URI: " + httpRequest.getUri();
+    private boolean writeBadRequest(HttpRequest httpRequest, String reason) {
+        String body = "Bad Request to URI: " + httpRequest.getUri() + ", " + reason + ".";
         FullHttpResponse response = ProxyUtils.createFullHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.BAD_REQUEST, body);
 
         if (ProxyUtils.isHEAD(httpRequest)) {
@@ -1299,7 +1323,7 @@ public class ClientToProxyConnection extends ProxyConnection<HttpRequest> {
 
         HttpResponse filteredResponse = (HttpResponse) currentFilters.proxyToClientShortCircuitResponse(httpResponse);
 
-        this.perReqVals.setNeedFiltering(false); // disable following processing if there is
+        this.perReqVals.setNeedFiltering(Boolean.FALSE); // disable following processing if there is
 
         if (filteredResponse == null) {
             disconnect();

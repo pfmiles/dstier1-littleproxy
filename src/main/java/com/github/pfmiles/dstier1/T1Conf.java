@@ -128,7 +128,9 @@ public class T1Conf {
 	 * reverse mode, the proxy will allow requests in origin form. Otherwise, the
 	 * proxy only accepts absolute form requests. According to http 1.1 protocol(RFC
 	 * 7230, section 5.3.2), clients must send requests in absolute form when
-	 * communicating with a forward proxy.
+	 * communicating with a forward proxy. And also note that when in reverse mode,
+	 * site mapping is a must, so you must specify a well behaved
+	 * SiteMappingManager when this value is true.
 	 */
 	private boolean reverseMode = true;
 	/**

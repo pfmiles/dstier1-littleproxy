@@ -963,20 +963,22 @@ public class ProxyUtils {
 	public static boolean needFiltering(HttpRequest request, T1Conf serverConf, ValueHolder perReqVals) {
 		Boolean nf = perReqVals.getNeedFiltering();
 		if (nf == null) {
-			// 1.if no interests in site mapping, false
-			if (serverConf.getSiteMappingManager() == null) {
-				perReqVals.setNeedFiltering(false);
-				return false;
-			}
-			String fromSite = resolveFromSite(request, perReqVals);
-			String toSite = resolveToSite(serverConf.getSiteMappingManager(), fromSite, perReqVals);
-			if (StringUtils.isBlank(toSite)) {
-				perReqVals.setNeedFiltering(false);
-				return false;
+			// 1.when reverse mode, site mapping is a must.
+			if (serverConf.isReverseMode()) {
+				if (serverConf.getSiteMappingManager() == null) {
+					perReqVals.setNeedFiltering(Boolean.FALSE);
+					return false;
+				}
+				String fromSite = resolveFromSite(request, perReqVals);
+				String toSite = resolveToSite(serverConf.getSiteMappingManager(), fromSite, perReqVals);
+				if (StringUtils.isBlank(toSite)) {
+					perReqVals.setNeedFiltering(Boolean.FALSE);
+					return false;
+				}
 			}
 			// 2.if no filters will be activated, false
 			if (serverConf.getFiltersFactory() == null) {
-				perReqVals.setNeedFiltering(false);
+				perReqVals.setNeedFiltering(Boolean.FALSE);
 				return false;
 			}
 			Pair<List<SortableFilterMethod>, List<SortableFilterMethod>> filterMethods = perReqVals.getFilterMethods();
@@ -986,7 +988,7 @@ public class ProxyUtils {
 				if (filters == null || filters.isEmpty()) {
 					filterMethods = ImmutablePair.of(null, null);
 					perReqVals.setFilterMethods(filterMethods);
-					perReqVals.setNeedFiltering(false);
+					perReqVals.setNeedFiltering(Boolean.FALSE);
 					return false;
 				}
 				// dedup and keep insertion order...
@@ -998,7 +1000,7 @@ public class ProxyUtils {
 				if (filterMethods == null) {
 					filterMethods = ImmutablePair.of(null, null);
 					perReqVals.setFilterMethods(filterMethods);
-					perReqVals.setNeedFiltering(false);
+					perReqVals.setNeedFiltering(Boolean.FALSE);
 					return false;
 				}
 				perReqVals.setFilterMethods(filterMethods);
@@ -1006,13 +1008,13 @@ public class ProxyUtils {
 			List<SortableFilterMethod> reqMethods = filterMethods.getLeft();
 			List<SortableFilterMethod> rspMethods = filterMethods.getRight();
 			if (reqMethods == null || reqMethods.isEmpty() || rspMethods == null || rspMethods.isEmpty()) {
-				perReqVals.setNeedFiltering(false);
+				perReqVals.setNeedFiltering(Boolean.FALSE);
 				return false;
 			}
 			if (reqMethods.size() != rspMethods.size()) {
 				throw new RuntimeException("It's impossible to get here, just for coding validity.");
 			}
-			perReqVals.setNeedFiltering(true);
+			perReqVals.setNeedFiltering(Boolean.TRUE);
 			return true;
 		}
 		return nf;
