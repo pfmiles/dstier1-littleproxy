@@ -217,4 +217,8 @@ class ConnectionFlow {
         connectLock.notifyAll();
     }
 
+	public Queue<ConnectionFlowStep> getSteps() {
+		return steps;
+	}
+
 }

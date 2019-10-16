@@ -43,7 +43,7 @@ public class ServerInMain {
 			@Override
 			protected String doSiteMapping(String origSite) {
 				if (T1Utils.siteEquals("http://abc.com", origSite)) {
-					return "http://bumonitor.stable.alipay.net:8080";
+					return "https://www.baidu.com";
 				} else {
 					return null;
 				}
@@ -63,14 +63,33 @@ public class ServerInMain {
 
 					@Override
 					public HttpResponse onRequesting(HttpObject httpObj) {
-						logger.info("On requesting: " + httpObj.toString());
+						logger.info("Proxy 1 On requesting: " + httpObj.toString());
 						return null;
 					}
 
 					@Override
-					@ExeOrder(999)
+					@ExeOrder(1)
 					public HttpObject onResponding(HttpObject httpObj) {
-						logger.info("On responding: " + httpObj.toString());
+						logger.info("Proxy 1 On responding: " + httpObj.toString());
+						return httpObj;
+					}
+				});
+				fs.add(new T1Filter() {
+
+					@Override
+					public boolean active(RequestInfo req) {
+						return HttpMethod.GET.equals(req.getMethod());
+					}
+
+					@Override
+					public HttpResponse onRequesting(HttpObject httpObj) {
+						logger.info("Proxy 2 On requesting: " + httpObj.toString());
+						return null;
+					}
+
+					@Override
+					public HttpObject onResponding(HttpObject httpObj) {
+						logger.info("Proxy 2 On responding: " + httpObj.toString());
 						return httpObj;
 					}
 				});

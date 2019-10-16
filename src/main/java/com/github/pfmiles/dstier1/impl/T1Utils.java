@@ -71,10 +71,9 @@ public abstract class T1Utils {
 			port1 = Integer.parseInt(StringUtils.substringAfter(noPro1, ":"));
 		} else {
 			// well-known default ports for http/https
-			if ("http".equals(proto1)) {
-				port1 = 80;
-			} else {
-				port1 = 443;
+			Integer p = WellKnownPortsMapping.getPortByName(proto1);
+			if (p != null) {
+				port1 = p;
 			}
 		}
 		int port2 = -1;
@@ -82,10 +81,9 @@ public abstract class T1Utils {
 			port2 = Integer.parseInt(StringUtils.substringAfter(noPro2, ":"));
 		} else {
 			// well-known default ports for http/https
-			if ("http".equals(proto2)) {
-				port2 = 80;
-			} else {
-				port2 = 443;
+			Integer p = WellKnownPortsMapping.getPortByName(proto2);
+			if (p != null) {
+				port2 = p;
 			}
 		}
 		if (port1 != port2) {

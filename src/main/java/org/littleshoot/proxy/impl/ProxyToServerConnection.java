@@ -1,5 +1,18 @@
 package org.littleshoot.proxy.impl;
 
+import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.net.UnknownHostException;
+import java.security.NoSuchAlgorithmException;
+import java.util.Queue;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.RejectedExecutionException;
+
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLEngine;
+import javax.net.ssl.SSLProtocolException;
+import javax.net.ssl.SSLSession;
+
 import com.google.common.net.HostAndPort;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.bootstrap.ChannelFactory;
@@ -39,17 +52,9 @@ import org.littleshoot.proxy.ChainedProxyManager;
 import org.littleshoot.proxy.FullFlowContext;
 import org.littleshoot.proxy.HttpFilters;
 import org.littleshoot.proxy.MitmManager;
+import org.littleshoot.proxy.SslEngineSource;
 import org.littleshoot.proxy.TransportProtocol;
 import org.littleshoot.proxy.UnknownTransportProtocolException;
-
-import javax.net.ssl.SSLProtocolException;
-import javax.net.ssl.SSLSession;
-import java.io.IOException;
-import java.net.InetSocketAddress;
-import java.net.UnknownHostException;
-import java.util.Queue;
-import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.RejectedExecutionException;
 
 import static org.littleshoot.proxy.impl.ConnectionState.AWAITING_CHUNK;
 import static org.littleshoot.proxy.impl.ConnectionState.AWAITING_CONNECT_OK;
@@ -541,9 +546,9 @@ public class ProxyToServerConnection extends ProxyConnection<HttpResponse> {
 
         if (chainedProxy != null && chainedProxy.requiresEncryption()) {
             connectionFlow.then(serverConnection.EncryptChannel(chainedProxy
-                    .newSslEngine()));
+                    .newSslEngine())); // XXX note that this 'newSslEngine' should be mutually exclusive to 'mitmManager' in conf
         }
-
+        
         if (ProxyUtils.isCONNECT(initialRequest)) {
             // If we're chaining, forward the CONNECT request
             if (hasUpstreamChainedProxy()) {
@@ -552,7 +557,7 @@ public class ProxyToServerConnection extends ProxyConnection<HttpResponse> {
             }        	
         	
             MitmManager mitmManager = proxyServer.getMitmManager();
-            boolean isMitmEnabled = mitmManager != null;
+            boolean isMitmEnabled = mitmManager != null;  // XXX note that this 'mitmManager' should be mutually exclusive to 'newSslEngine' in chaindProxies
 
             if (isMitmEnabled) {
                 // When MITM is enabled and when chained proxy is set up, remoteAddress
@@ -560,28 +565,69 @@ public class ProxyToServerConnection extends ProxyConnection<HttpResponse> {
                 // which is the end server's address.
                 HostAndPort parsedHostAndPort = HostAndPort.fromString(serverHostAndPort);
 
-                // SNI may be disabled for this request due to a previous failed attempt to connect to the server
-                // with SNI enabled.
-                if (disableSni) {
-                    connectionFlow.then(serverConnection.EncryptChannel(proxyServer.getMitmManager()
-                            .serverSslEngine()));
-                } else {
-                    connectionFlow.then(serverConnection.EncryptChannel(proxyServer.getMitmManager()
-                            .serverSslEngine(parsedHostAndPort.getHost(), parsedHostAndPort.getPort())));
+                if (noServerEncryptionStepAdded(this.connectionFlow)) {
+	                // SNI may be disabled for this request due to a previous failed attempt to connect to the server
+	                // with SNI enabled.
+	                if (disableSni) {
+	                    connectionFlow.then(serverConnection.EncryptChannel(proxyServer.getMitmManager()
+	                            .serverSslEngine()));
+	                } else {
+	                    connectionFlow.then(serverConnection.EncryptChannel(proxyServer.getMitmManager()
+	                            .serverSslEngine(parsedHostAndPort.getHost(), parsedHostAndPort.getPort())));
+	                }
                 }
 
             	connectionFlow
                         .then(clientConnection.RespondCONNECTSuccessful)
-                        .then(serverConnection.MitmEncryptClientChannel);
+                        .then(serverConnection.MitmEncryptClientChannel); // also encrypts the client connection
             } else {
                 connectionFlow.then(serverConnection.StartTunneling)
                         .then(clientConnection.RespondCONNECTSuccessful)
                         .then(clientConnection.StartTunneling);
             }
+        } else if (ProxyUtils.isHttpsRequest(initialRequest, this.clientConnection.getPerReqVals()) && noServerEncryptionStepAdded(this.connectionFlow)) {
+        	// also add hand-shaking step when requesting https upstream
+        	connectionFlow.then(serverConnection.EncryptChannel(resolveSslEngineForHttpsUpstream()));
         }
     }
 
-    /**
+	private boolean noServerEncryptionStepAdded(ConnectionFlow flow) {
+		for (ConnectionFlowStep step : flow.getSteps()) {
+			if (MitmEncryptClientChannel != step && (step.getConnection() instanceof ProxyToServerConnection) && ConnectionState.HANDSHAKING.equals(step.getState())) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	// get the sslEngine to use to connect to https upstream
+	private SSLEngine resolveSslEngineForHttpsUpstream() {
+		// 1.try to get sslEngine from MitmManager
+		MitmManager mitmMgr = proxyServer.getMitmManager();
+		if (mitmMgr != null) {
+			HostAndPort hostAndPort = HostAndPort.fromString(serverHostAndPort);
+			return mitmMgr.serverSslEngine(hostAndPort.getHost(), hostAndPort.getPort());
+		}
+		// 2.otherwise try to get sslEngine from sslEngineSource
+		SslEngineSource es = proxyServer.getSslEngineSource();
+		if (es != null) {
+			HostAndPort hostAndPort = HostAndPort.fromString(serverHostAndPort);
+			return es.newSslEngine(hostAndPort.getHost(), hostAndPort.getPort());
+		} else {
+			// 3.or return a default sslEngine
+			SSLContext ctx = null;
+			try {
+				ctx = SSLContext.getDefault();
+			} catch (NoSuchAlgorithmException e) {
+				LOG.error("SSL context creation failed.", e);
+				throw new RuntimeException(e);
+			}
+			HostAndPort hostAndPort = HostAndPort.fromString(serverHostAndPort);
+			return ctx.createSSLEngine(hostAndPort.getHost(), hostAndPort.getPort());
+		}
+	}
+
+	/**
      * Opens the socket connection.
      */
     private ConnectionFlowStep ConnectChannel = new ConnectionFlowStep(this,
@@ -877,7 +923,7 @@ public class ProxyToServerConnection extends ProxyConnection<HttpResponse> {
                 proxyServer.getMaxHeaderSize(),
                 proxyServer.getMaxChunkSize()));
 
-        // Enable aggregation for filtering if necessary TODO pf_miles: modify to accommodate new features
+        // Enable aggregation for filtering if necessary
         int numberOfBytesToBuffer = proxyServer.getFiltersSource()
                 .getMaximumResponseBufferSizeInBytes();
         //        if (numberOfBytesToBuffer > 0) {

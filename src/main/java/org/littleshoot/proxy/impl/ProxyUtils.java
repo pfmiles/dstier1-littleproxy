@@ -29,6 +29,7 @@ import com.github.pfmiles.dstier1.T1Filter;
 import com.github.pfmiles.dstier1.impl.SortableFilterMethod;
 import com.github.pfmiles.dstier1.impl.TimedCacheItem;
 import com.github.pfmiles.dstier1.impl.ValueHolder;
+import com.github.pfmiles.dstier1.impl.WellKnownPortsMapping;
 import com.google.common.base.Splitter;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
@@ -247,11 +248,21 @@ public class ProxyUtils {
 			// could be either http or https.
 			tempUri = StringUtils.substringAfter(uri, "://");
 		}
-		final String hostAndPort;
+		String hostAndPort;
 		if (tempUri.contains("/")) {
 			hostAndPort = tempUri.substring(0, tempUri.indexOf("/"));
 		} else {
 			hostAndPort = tempUri;
+		}
+		// if no port info, add it
+		if (!hostAndPort.contains(":")) {
+			String scheme = StringUtils.substringBefore(uri, "://");
+			if (StringUtils.isNotBlank(scheme)) {
+				Integer port = WellKnownPortsMapping.getPortByName(scheme);
+				if (port != null) {
+					hostAndPort = hostAndPort + ":" + port;
+				}
+			}
 		}
 		return hostAndPort;
 	}
@@ -1042,6 +1053,30 @@ public class ProxyUtils {
 			perVals.setFromSite(fromSite);
 		}
 		return fromSite;
+	}
+
+	/**
+	 * Tell if the specified request is a https request
+	 */
+	public static boolean isHttpsRequest(HttpRequest request, ValueHolder perReqVals) {
+		Boolean https = perReqVals.getHttpsRequest();
+		if (https == null) {
+			// if the uri starts with https, true
+			if (request.getUri().startsWith("https://")) {
+				https = Boolean.TRUE;
+			} else {
+				// else if the host header indicates a 443 port connection, true
+				String hostAndPort = parseHostAndPort(request);
+				if (hostAndPort != null && hostAndPort.contains(":")
+						&& "443".equals(StringUtils.substringAfter(hostAndPort, ":"))) {
+					https = Boolean.TRUE;
+				} else {
+					https = Boolean.FALSE;
+				}
+			}
+			perReqVals.setHttpsRequest(https);
+		}
+		return https;
 	}
 
 }

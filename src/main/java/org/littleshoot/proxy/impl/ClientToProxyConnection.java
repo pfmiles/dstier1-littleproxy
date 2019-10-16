@@ -298,6 +298,8 @@ public class ClientToProxyConnection extends ProxyConnection<HttpRequest> {
 
         // Identify our server and chained proxy
         String serverHostAndPort = ProxyUtils.parseHostAndPort(httpRequest);
+        // init https
+        ProxyUtils.isHttpsRequest(httpRequest, this.perReqVals);
 
         LOG.debug("Ensuring that hostAndPort are available in {}",
                 httpRequest.getUri());
@@ -842,7 +844,7 @@ public class ClientToProxyConnection extends ProxyConnection<HttpRequest> {
                 proxyServer.getMaxHeaderSize(),
                 proxyServer.getMaxChunkSize()));
 
-        // Enable aggregation for filtering if necessary TODO pf_miles: modify to accommodate the new features
+        // Enable aggregation for filtering if necessary
         int numberOfBytesToBuffer = proxyServer.getFiltersSource()
                 .getMaximumRequestBufferSizeInBytes();
         //        if (numberOfBytesToBuffer > 0) {

@@ -44,6 +44,18 @@ public class ValueHolder {
 	 * filter methods for this request process
 	 */
 	private Pair<List<SortableFilterMethod>, List<SortableFilterMethod>> filterMethods;
+	/**
+	 * tell if the current request is a https request
+	 */
+	private Boolean httpsRequest;
+
+	public Boolean getHttpsRequest() {
+		return httpsRequest;
+	}
+
+	public void setHttpsRequest(Boolean httpsRequest) {
+		this.httpsRequest = httpsRequest;
+	}
 
 	public Pair<List<SortableFilterMethod>, List<SortableFilterMethod>> getFilterMethods() {
 		return filterMethods;
