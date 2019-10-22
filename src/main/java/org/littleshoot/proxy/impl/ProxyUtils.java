@@ -38,8 +38,10 @@ import com.google.common.collect.ImmutableSet;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.udt.nio.NioUdtProvider;
+import io.netty.handler.codec.http.DefaultFullHttpRequest;
 import io.netty.handler.codec.http.DefaultFullHttpResponse;
 import io.netty.handler.codec.http.DefaultHttpResponse;
+import io.netty.handler.codec.http.FullHttpRequest;
 import io.netty.handler.codec.http.FullHttpResponse;
 import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpMessage;
@@ -736,6 +738,22 @@ public class ProxyUtils {
 		}
 
 		return response;
+	}
+
+	public static FullHttpRequest createFullHttpRequestWithSameHeaders(HttpRequest originalReq, ByteBuf body) {
+		FullHttpRequest ret = new DefaultFullHttpRequest(originalReq.getProtocolVersion(), originalReq.getMethod(),
+				originalReq.getUri(), body);
+		ret.setDecoderResult(originalReq.getDecoderResult());
+		ret.headers().add(originalReq.headers());
+		return ret;
+	}
+
+	public static FullHttpResponse createFullHttpResponseWithSameHeaders(HttpResponse originalResp, ByteBuf body) {
+		FullHttpResponse ret = new DefaultFullHttpResponse(originalResp.getProtocolVersion(), originalResp.getStatus(),
+				body);
+		ret.setDecoderResult(originalResp.getDecoderResult());
+		ret.headers().add(originalResp.headers());
+		return ret;
 	}
 
 	/**

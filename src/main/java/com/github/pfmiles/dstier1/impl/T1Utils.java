@@ -15,14 +15,35 @@
  ******************************************************************************/
 package com.github.pfmiles.dstier1.impl;
 
+import java.nio.charset.Charset;
+import java.nio.charset.UnsupportedCharsetException;
+
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
+import io.netty.handler.codec.http.DefaultHttpContent;
+import io.netty.handler.codec.http.FullHttpMessage;
+import io.netty.handler.codec.http.FullHttpRequest;
+import io.netty.handler.codec.http.FullHttpResponse;
+import io.netty.handler.codec.http.HttpContent;
+import io.netty.handler.codec.http.HttpHeaders;
+import io.netty.handler.codec.http.HttpMessage;
+import io.netty.handler.codec.http.HttpObject;
+import io.netty.handler.codec.http.LastHttpContent;
+import io.netty.util.CharsetUtil;
 import org.apache.commons.lang3.StringUtils;
 import org.littleshoot.proxy.impl.ProxyUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * @author pf-miles
  *
  */
 public abstract class T1Utils {
+
+	private static final Logger logger = LoggerFactory.getLogger(T1Utils.class);
+
+	private static final byte[] EMPTY_BYTES = new byte[0];
 
 	/**
 	 * Convenience method to tell if the specified two sites are the same
@@ -91,5 +112,196 @@ public abstract class T1Utils {
 		}
 
 		return true;
+	}
+
+	/**
+	 * Tell if the specified request/response is transferring in chunked encoding
+	 * 
+	 * @param msg
+	 *            could either be a HttpRequest or HttpResponse
+	 */
+	public static boolean isChunkedTransfer(HttpMessage msg) {
+		return HttpHeaders.isTransferEncodingChunked(msg);
+	}
+
+	/**
+	 * Get the content encoding from the specified request/response, or null when
+	 * not specified.
+	 * 
+	 * @param msg
+	 *            http request or response
+	 * @return encoding of the message body, or null when no encoding info found
+	 */
+	public static Charset getContentEncoding(HttpMessage msg) {
+		return getContentEncoding(msg, CharsetUtil.UTF_8);
+	}
+
+	private static Charset getContentEncoding(HttpMessage message, Charset defaultCharset) {
+		CharSequence contentTypeValue = message.headers().get(HttpHeaders.Names.CONTENT_TYPE);
+		if (contentTypeValue != null) {
+			return getContentEncodingFromCttTypeValue(contentTypeValue, defaultCharset);
+		} else {
+			return defaultCharset;
+		}
+	}
+
+	private static Charset getContentEncodingFromCttTypeValue(CharSequence contentTypeValue, Charset defaultCharset) {
+		if (contentTypeValue != null) {
+			CharSequence charsetCharSequence = getCharsetAsSequenceFromCttTypeValue(contentTypeValue);
+			if (charsetCharSequence != null) {
+				try {
+					return Charset.forName(charsetCharSequence.toString());
+				} catch (UnsupportedCharsetException ignored) {
+					return defaultCharset;
+				}
+			} else {
+				return defaultCharset;
+			}
+		} else {
+			return defaultCharset;
+		}
+	}
+
+	private static CharSequence getCharsetAsSequenceFromCttTypeValue(CharSequence contentTypeValue) {
+		if (contentTypeValue == null) {
+			return null;
+		}
+		int indexOfCharset = StringUtils.indexOfIgnoreCase(contentTypeValue, "charset=");
+		if (indexOfCharset == -1) {
+			return null;
+		}
+		int indexOfEncoding = indexOfCharset + "charset=".length();
+		if (indexOfEncoding < contentTypeValue.length()) {
+			CharSequence charsetCandidate = contentTypeValue.subSequence(indexOfEncoding, contentTypeValue.length());
+			int indexOfSemicolon = StringUtils.indexOf(charsetCandidate, ";");
+			if (indexOfSemicolon == -1) {
+				return charsetCandidate;
+			}
+			return charsetCandidate.subSequence(0, indexOfSemicolon);
+		}
+		return null;
+	}
+
+	/**
+	 * Get the body content(if any) from the specified http object(a
+	 * request/response or httpContent).
+	 * 
+	 * a request/response or a httpContent
+	 * 
+	 * @return the http content bytes array if it has, or a byte array of length 0
+	 *         when no content found
+	 */
+	public static byte[] getContentBytes(HttpObject obj) {
+		/*
+		 * note that FullHttpMessage also implements HttpContent, so we need to test
+		 * HttpContent only
+		 */
+		if (obj instanceof HttpContent) {
+			return readBytesUnchanged(((HttpContent) obj).content());
+		} else {
+			return EMPTY_BYTES;
+		}
+	}
+
+	// read the bytes but also reset the cursors
+	private static byte[] readBytesUnchanged(ByteBuf bb) {
+		int readableBytes = bb.readableBytes();
+		if (readableBytes > 0) {
+			bb.markReaderIndex();
+			byte[] ret = new byte[readableBytes];
+			bb.readBytes(ret);
+			bb.resetReaderIndex();
+			return ret;
+		} else {
+			return EMPTY_BYTES;
+		}
+	}
+
+	/**
+	 * Set the bytes into the specified httpObject. May create new httpObject of the
+	 * same type and set data into it then return when the original httpObject's
+	 * byte buffer has not enough capacity to write.
+	 * 
+	 * @param httpObj
+	 *            the original request/response or chunk
+	 * @param data
+	 *            the data to be set
+	 * 
+	 * @return the modified http object, may be newly created
+	 */
+	public static HttpObject setContentBytes(HttpObject httpObj, byte[] data) {
+		if (!(httpObj instanceof FullHttpMessage
+				|| (httpObj instanceof HttpContent && !(httpObj instanceof LastHttpContent)))) {
+			throw new IllegalArgumentException("Cannot set bytes into a no content object: " + String.valueOf(httpObj));
+		}
+		if (data == null) {
+			data = EMPTY_BYTES;
+		}
+		HttpObject ret = null;
+		ByteBuf bb = ((HttpContent) httpObj).content();// note that FullHttpMessage is also a HttpContent instance
+		if (isInplacelyWritable(bb, data.length)) {
+			// 1.fist try to modify bytes in place
+			ret = httpObj;
+			setBytes(bb, data);
+		} else {
+			// 2.if no capacity to write, swap the whole object
+			if (httpObj instanceof FullHttpRequest) {
+				ByteBuf body = Unpooled.wrappedBuffer(data);
+				setBytes(body, data);
+				ret = ProxyUtils.createFullHttpRequestWithSameHeaders((FullHttpRequest) httpObj, body);
+			} else if (httpObj instanceof FullHttpResponse) {
+				ByteBuf body = Unpooled.wrappedBuffer(data);
+				setBytes(body, data);
+				ret = ProxyUtils.createFullHttpResponseWithSameHeaders((FullHttpResponse) httpObj, body);
+			} else if (httpObj instanceof HttpContent && !(httpObj instanceof LastHttpContent)) {
+				ByteBuf body = Unpooled.wrappedBuffer(data);
+				setBytes(body, data);
+				ret = new DefaultHttpContent(body);
+			} else {
+				throw new RuntimeException("Impossible.");
+			}
+		}
+		if (ret instanceof FullHttpMessage) {
+			// also set the content length respectively
+			HttpHeaders.setContentLength((HttpMessage) ret, data.length);
+		}
+		return ret;
+	}
+
+	// tell if there's enough space to write
+	private static boolean isInplacelyWritable(ByteBuf bb, int dataSizeToWrite) {
+		int readIdx = bb.readerIndex();
+		int writeIdx = bb.writerIndex();
+		// discard the current unread data
+		bb.writerIndex(readIdx);
+		// try to enlarge the buf if not enough space
+		int rst = bb.ensureWritable(dataSizeToWrite, false);
+		// recover the writer index
+		bb.writerIndex(writeIdx);
+		return (rst == 0 || rst == 2);
+	}
+
+	// discard old data and set new ones
+	private static void setBytes(ByteBuf bb, byte[] data) {
+		if (data == null) {
+			data = EMPTY_BYTES;
+		}
+		int readIdx = bb.readerIndex();
+		int writeIdx = bb.writerIndex();
+		// discard the current unread data
+		bb.writerIndex(readIdx);
+		// try to enlarge the buf if not enough space
+		int rst = bb.ensureWritable(data.length, false);
+		if (rst == 0 || rst == 2) {
+			bb.writeBytes(data);
+		} else {
+			/*
+			 * not enough capacity, write operation failed, reset the writer index(recover
+			 * the discarded unread data)
+			 */
+			bb.writerIndex(writeIdx);
+			throw new IllegalArgumentException(
+					"Not enough capacity to write, 'setBytes' failed, the byteBuf will be left unchanged.");
+		}
 	}
 }

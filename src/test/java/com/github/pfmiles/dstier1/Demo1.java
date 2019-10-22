@@ -1,8 +1,6 @@
-/**
- * 
- */
 package com.github.pfmiles.dstier1;
 
+import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -15,14 +13,14 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * For development debugging...
+ * No site mapping, response interfering
  * 
  * @author pf-miles
  *
  */
-public class ServerInMain {
+public class Demo1 {
 
-	private static final Logger logger = LoggerFactory.getLogger(ServerInMain.class);
+	private static final Logger logger = LoggerFactory.getLogger(Demo1.class);
 
 	public static void main(String[] args) throws Exception {
 		T1Conf conf = resolveConf();
@@ -40,8 +38,8 @@ public class ServerInMain {
 
 			@Override
 			protected String doSiteMapping(String origSite) {
-				if (T1Utils.siteEquals("http://abc.com", origSite)) {
-					return "https://www.baidu.com";
+				if (T1Utils.siteEquals("http://abc.com:8080", origSite)) {
+					return "http://bumonitor.stable.alipay.net:8080";
 				} else {
 					return null;
 				}
@@ -54,25 +52,7 @@ public class ServerInMain {
 				List<T1Filter> fs = new ArrayList<>();
 				fs.add(new T1Filter() {
 
-					@Override
-					public boolean active(RequestInfo req) {
-						return HttpMethod.GET.equals(req.getMethod());
-					}
-
-					@Override
-					public HttpResponse onRequesting(HttpObject httpObj) {
-						logger.info("Proxy 1 On requesting: " + httpObj.toString());
-						return null;
-					}
-
-					@Override
-					@ExeOrder(1)
-					public HttpObject onResponding(HttpObject httpObj) {
-						logger.info("Proxy 1 On responding: " + httpObj.toString());
-						return httpObj;
-					}
-				});
-				fs.add(new T1Filter() {
+					private Charset respEncoding = null;
 
 					@Override
 					public boolean active(RequestInfo req) {
@@ -81,14 +61,33 @@ public class ServerInMain {
 
 					@Override
 					public HttpResponse onRequesting(HttpObject httpObj) {
-						logger.info("Proxy 2 On requesting: " + httpObj.toString());
 						return null;
 					}
 
 					@Override
 					public HttpObject onResponding(HttpObject httpObj) {
-						logger.info("Proxy 2 On responding: " + httpObj.toString());
+						if (httpObj instanceof HttpResponse) {
+							this.respEncoding = T1Utils.getContentEncoding((HttpResponse) httpObj);
+						}
+						byte[] data = T1Utils.getContentBytes(httpObj);
+						if (data.length > 0) {
+							String dataStr = new String(data, this.respEncoding);
+							dataStr = doModify(dataStr);
+							data = dataStr.getBytes(this.respEncoding);
+							httpObj = T1Utils.setContentBytes(httpObj, data);
+						}
 						return httpObj;
+					}
+
+					private String doModify(String dataStr) {
+						if (dataStr.indexOf("<head>") != -1) {
+							logger.info(
+									"To find '<head>' tag and insert '<script>window.onload = function(){window.alert(\"Hello world!\");};</script>' after it.");
+							return dataStr.replace("<head>",
+									"<head><script>window.onload = function(){window.alert(\"Hello world!\");};</script>");
+						} else {
+							return dataStr;
+						}
 					}
 				});
 				return fs;
@@ -96,5 +95,4 @@ public class ServerInMain {
 		});
 		return ret;
 	}
-
 }

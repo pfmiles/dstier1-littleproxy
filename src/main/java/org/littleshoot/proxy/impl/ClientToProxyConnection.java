@@ -39,6 +39,7 @@ import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.HttpVersion;
 import io.netty.handler.timeout.IdleStateHandler;
 import io.netty.handler.traffic.GlobalTrafficShapingHandler;
+import io.netty.util.ReferenceCountUtil;
 import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.GenericFutureListener;
 import org.apache.commons.lang3.StringUtils;
@@ -518,21 +519,29 @@ public class ClientToProxyConnection extends ProxyConnection<HttpRequest> {
             modifyResponseHeadersToReflectProxying(httpResponse);
         }
         // TODO pf_miles: on responding filter intercepts here!!!
-        httpObject = filters.proxyToClientResponse(httpObject);
-        if (httpObject == null) {
-            forceDisconnect(serverConnection);
-            this.perReqVals.setNeedFiltering(false);
-            return;
+        HttpObject orig = httpObject;
+        try {
+	        httpObject = filters.proxyToClientResponse(httpObject);
+	        if (httpObject == null) {
+	            forceDisconnect(serverConnection);
+	            this.perReqVals.setNeedFiltering(false);
+	            return;
+	        }
+	
+	        write(httpObject);
+	
+	        if (ProxyUtils.isLastChunk(httpObject)) {
+	            writeEmptyBuffer();
+	        }
+	
+	        closeConnectionsAfterWriteIfNecessary(serverConnection,
+	                currentHttpRequest, currentHttpResponse, httpObject);
+        } finally {
+        	// if the original httpObject is changed with a new one, release the new one by hand
+        	if (httpObject != null && orig != httpObject) {
+            	ReferenceCountUtil.release(httpObject);
+            }
         }
-
-        write(httpObject);
-
-        if (ProxyUtils.isLastChunk(httpObject)) {
-            writeEmptyBuffer();
-        }
-
-        closeConnectionsAfterWriteIfNecessary(serverConnection,
-                currentHttpRequest, currentHttpResponse, httpObject);
     }
 
     /***************************************************************************
