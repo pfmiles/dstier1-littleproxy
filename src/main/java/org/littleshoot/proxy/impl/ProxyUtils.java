@@ -1,7 +1,9 @@
 package org.littleshoot.proxy.impl;
 
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.net.InetAddress;
 import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
@@ -19,6 +21,7 @@ import java.util.TimeZone;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Function;
 import java.util.regex.Pattern;
 
 import com.github.pfmiles.dstier1.ExeOrder;
@@ -27,6 +30,7 @@ import com.github.pfmiles.dstier1.SiteMappingManager;
 import com.github.pfmiles.dstier1.T1Conf;
 import com.github.pfmiles.dstier1.T1Filter;
 import com.github.pfmiles.dstier1.impl.SortableFilterMethod;
+import com.github.pfmiles.dstier1.impl.SwappedByteBuf;
 import com.github.pfmiles.dstier1.impl.TimedCacheItem;
 import com.github.pfmiles.dstier1.impl.ValueHolder;
 import com.github.pfmiles.dstier1.impl.WellKnownPortsMapping;
@@ -40,9 +44,11 @@ import io.netty.buffer.Unpooled;
 import io.netty.channel.udt.nio.NioUdtProvider;
 import io.netty.handler.codec.http.DefaultFullHttpRequest;
 import io.netty.handler.codec.http.DefaultFullHttpResponse;
+import io.netty.handler.codec.http.DefaultHttpContent;
 import io.netty.handler.codec.http.DefaultHttpResponse;
 import io.netty.handler.codec.http.FullHttpRequest;
 import io.netty.handler.codec.http.FullHttpResponse;
+import io.netty.handler.codec.http.HttpContent;
 import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpMessage;
 import io.netty.handler.codec.http.HttpMethod;
@@ -52,6 +58,7 @@ import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.HttpVersion;
 import io.netty.handler.codec.http.LastHttpContent;
+import io.netty.util.ReferenceCountUtil;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.math.NumberUtils;
 import org.apache.commons.lang3.tuple.ImmutablePair;
@@ -115,10 +122,15 @@ public class ProxyUtils {
 			.expireAfterAccess(60L, TimeUnit.SECONDS).build();
 	// prevents null-value-attack
 	private static final Method DUMMY;
+	// content field cache for httpContents
+	private static Cache<Pair<Class<? extends HttpContent>, String>, TimedCacheItem<Field>> contentFieldsCache = CacheBuilder
+			.newBuilder().concurrencyLevel(CORE_NUM * 2).initialCapacity(CORE_NUM * 8).maximumSize(256)
+			.expireAfterAccess(60L, TimeUnit.SECONDS).build();
+	private static final Field DUMMY_F;
 	static {
-		// active(RequestInfo req)
 		try {
 			DUMMY = T1Filter.class.getMethod("active", RequestInfo.class);
+			DUMMY_F = ProxyUtils.class.getDeclaredField("DUMMY_F");
 		} catch (Exception e) {
 			throw new RuntimeException(e);
 		}
@@ -740,22 +752,6 @@ public class ProxyUtils {
 		return response;
 	}
 
-	public static FullHttpRequest createFullHttpRequestWithSameHeaders(HttpRequest originalReq, ByteBuf body) {
-		FullHttpRequest ret = new DefaultFullHttpRequest(originalReq.getProtocolVersion(), originalReq.getMethod(),
-				originalReq.getUri(), body);
-		ret.setDecoderResult(originalReq.getDecoderResult());
-		ret.headers().add(originalReq.headers());
-		return ret;
-	}
-
-	public static FullHttpResponse createFullHttpResponseWithSameHeaders(HttpResponse originalResp, ByteBuf body) {
-		FullHttpResponse ret = new DefaultFullHttpResponse(originalResp.getProtocolVersion(), originalResp.getStatus(),
-				body);
-		ret.setDecoderResult(originalResp.getDecoderResult());
-		ret.headers().add(originalResp.headers());
-		return ret;
-	}
-
 	/**
 	 * Given an HttpHeaders instance, removes 'sdch' from the 'Accept-Encoding'
 	 * header list (if it exists) and returns the modified instance.
@@ -978,6 +974,13 @@ public class ProxyUtils {
 		return new TimedCacheItem<Method>(DUMMY, c.getTime());
 	}
 
+	// creates a new 1 min expire dummy item
+	private static TimedCacheItem<Field> newOneMinDummyF() {
+		Calendar c = Calendar.getInstance();
+		c.add(Calendar.MINUTE, 1);
+		return new TimedCacheItem<Field>(DUMMY_F, c.getTime());
+	}
+
 	/**
 	 * tell if this request need filtering
 	 * 
@@ -1095,6 +1098,202 @@ public class ProxyUtils {
 			perReqVals.setHttpsRequest(https);
 		}
 		return https;
+	}
+
+	/**
+	 * Tell if the specified http object can have a content
+	 */
+	public static <T extends HttpObject> boolean hasContent(T obj) {
+		return obj instanceof HttpContent && LastHttpContent.EMPTY_LAST_CONTENT != obj;
+	}
+
+	/**
+	 * try to set the byteBuf of the specified httpContent
+	 * 
+	 * @param ctt
+	 *            the specified httpContent
+	 * @param buf
+	 */
+	public static void setContentBuf(HttpContent ctt, ByteBuf buf) {
+		try {
+			// 1.try to get the 'content' field of the httpContent
+			Field cttField = tryGetContentField(ctt, "content");
+			if (cttField == null) {
+				LOG.error("Cannot find 'content' field in HttpContet object: " + String.valueOf(ctt));
+				return;
+			}
+			// 2.set the 'content' field using the specified buf
+			cttField.set(ctt, buf);
+		} catch (Throwable t) {
+			LOG.error("Set content byteBuf failed.", t);
+		}
+	}
+
+	/**
+	 * try to get a field in the specified object, if found, ensure it is accessible
+	 * and return
+	 * 
+	 * @param ctt
+	 *            the object in which the 'content' field to be found
+	 * @param fieldName
+	 *            the name of the field to find
+	 * 
+	 * @return the found 'content' field, and ensured accessible
+	 */
+	private static Field tryGetContentField(HttpContent ctt, String fieldName) {
+		if (ctt == null) {
+			return null;
+		}
+		Class<? extends HttpContent> c = ctt.getClass();
+		Field f = null;
+		Pair<Class<? extends HttpContent>, String> k = ImmutablePair.of(c, fieldName);
+		try {
+			TimedCacheItem<Field> i = contentFieldsCache.get(k, new Callable<TimedCacheItem<Field>>() {
+
+				@Override
+				public TimedCacheItem<Field> call() throws Exception {
+					if (LOG.isDebugEnabled()) {
+						LOG.debug("HttpContent field cache miss, reflecting field for httpContent: '" + c.getName()
+								+ "', field: '" + fieldName + "'.");
+					}
+					Field field = getDeclaredFieldRecursively(c, fieldName);
+					if (field == null) {
+						if (LOG.isDebugEnabled()) {
+							LOG.debug("Could not find field with name: '" + fieldName + "' in httpContent class: '"
+									+ c.getName() + "', returning null and turn on 1 min null-value protection.");
+						}
+						return newOneMinDummyF();
+					} else {
+						// make the field accessible
+						field.setAccessible(true);
+						// make it no final
+						if ((field.getModifiers() & Modifier.FINAL) != 0) {
+							Field mods = Field.class.getDeclaredField("modifiers");
+							mods.setAccessible(true);
+							mods.setInt(field, field.getModifiers() & ~Modifier.FINAL);
+						}
+						return new TimedCacheItem<Field>(field);
+					}
+				}
+			});
+			f = i.getItem();
+			// check for expire in biz def
+			if (f == DUMMY_F) {
+				f = null;
+				if (new Date().after(i.getExpireOn())) {
+					contentFieldsCache.invalidate(k);
+				}
+			}
+		} catch (ExecutionException e) {
+			LOG.error("Resolving content field throws exception, HttpContent class: '" + c.toString()
+					+ "', field name: '" + fieldName + "', returning null and turn on error protection for 1 minite.",
+					e);
+			contentFieldsCache.put(k, newOneMinDummyF());
+			f = null;
+		}
+		return f;
+	}
+
+	private static Field getDeclaredFieldRecursively(Class<?> c, String fieldName) {
+		Field field = null;
+		while (field == null && !Object.class.equals(c)) {
+			try {
+				field = c.getDeclaredField(fieldName);
+			} catch (NoSuchFieldException e) {
+				c = c.getSuperclass();
+				field = null;
+			}
+		}
+		return field;
+	}
+
+	/**
+	 * <pre>
+	 * 1.resovle the byteBuf 
+	 * 2.if swapped and the current effecting buf is not the original one, restore the original buf into the origianl httpObject, and create a new httpObject carrying the current effecting buf then write
+	 * 3.release all the created ones
+	 * </pre>
+	 * 
+	 * @param httpObject
+	 *            the object to write
+	 * @param writing
+	 *            the writing logic
+	 */
+	public static void swappableBufWriteTrick(HttpObject httpObject, Function<HttpObject, Void> writing) {
+		// resolve the byteBuf
+		SwappedByteBuf sbb = null;
+		if (hasContent(httpObject)) {
+			ByteBuf buf = ((HttpContent) httpObject).content();
+			if (buf instanceof SwappedByteBuf) {
+				sbb = (SwappedByteBuf) buf;
+			}
+		}
+		if (sbb != null && sbb.getCur() != sbb.getOrig()) {
+			// restore the original buf
+			setContentBuf((HttpContent) httpObject, sbb.getOrig());
+			// create a new httpObject with the current effecting buf to write
+			httpObject = createSameHttpContentWithNewBuf((HttpContent) httpObject, sbb.getCur());
+		}
+		try {
+			writing.apply(httpObject);
+		} finally {
+			if (sbb != null) {
+				// release all the created ones
+				for (ByteBuf c : sbb.getCreated()) {
+					ReferenceCountUtil.release(c);
+				}
+			}
+		}
+	}
+
+	/*
+	 * create a new full httpContent with the same headers to the spciefied
+	 * httpContent, and with the provided byteBuf
+	 */
+	private static HttpObject createSameHttpContentWithNewBuf(HttpContent ctt, ByteBuf buf) {
+		HttpObject ret = null;
+		if (ctt instanceof FullHttpRequest) {
+			FullHttpRequest req = (FullHttpRequest) ctt;
+			FullHttpRequest r = new DefaultFullHttpRequest(req.getProtocolVersion(), req.getMethod(), req.getUri(),
+					buf);
+			r.headers().add(req.headers());
+			r.trailingHeaders().add(req.trailingHeaders());
+			ret = r;
+		} else if (ctt instanceof FullHttpResponse) {
+			FullHttpResponse resp = (FullHttpResponse) ctt;
+			FullHttpResponse r = new DefaultFullHttpResponse(resp.getProtocolVersion(), resp.getStatus(), buf);
+			r.headers().add(resp.headers());
+			r.trailingHeaders().add(resp.trailingHeaders());
+			ret = r;
+		} else {
+			ret = new DefaultHttpContent(buf);
+		}
+		return ret;
+	}
+
+	/**
+	 * try to release all the created bufs if the specified httpObject is a
+	 * httpContent with SwappedByteBuf
+	 * 
+	 * @param httpObject
+	 *            the specified httpObject
+	 */
+	public static void releaseAnyCreatedBuf(HttpObject httpObject) {
+		if (hasContent(httpObject)) {
+			// resolve the byteBuf
+			ByteBuf buf = ((HttpContent) httpObject).content();
+			if (buf instanceof SwappedByteBuf) {
+				SwappedByteBuf sbb = (SwappedByteBuf) buf;
+				// restore the original buf
+				setContentBuf((HttpContent) httpObject, sbb.getOrig());
+				// release all the created bufs
+				for (ByteBuf c : sbb.getCreated()) {
+					if (c.refCnt() > 0) {
+						ReferenceCountUtil.release(c, c.refCnt());
+					}
+				}
+			}
+		}
 	}
 
 }

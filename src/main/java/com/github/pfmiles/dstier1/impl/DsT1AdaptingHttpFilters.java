@@ -88,7 +88,7 @@ public class DsT1AdaptingHttpFilters extends HttpFiltersAdapter {
 					}
 					return shortRsp;
 				}
-			} catch (Exception e) {
+			} catch (Throwable e) {
 				if (failFastOnFilterError) {
 					// respond bad gateway to fail fast
 					String errMsg = "Filter method execution throws exception, please contact the sys-admin.";

@@ -19,16 +19,11 @@ import java.nio.charset.Charset;
 import java.nio.charset.UnsupportedCharsetException;
 
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.Unpooled;
-import io.netty.handler.codec.http.DefaultHttpContent;
 import io.netty.handler.codec.http.FullHttpMessage;
-import io.netty.handler.codec.http.FullHttpRequest;
-import io.netty.handler.codec.http.FullHttpResponse;
 import io.netty.handler.codec.http.HttpContent;
 import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpMessage;
 import io.netty.handler.codec.http.HttpObject;
-import io.netty.handler.codec.http.LastHttpContent;
 import io.netty.util.CharsetUtil;
 import org.apache.commons.lang3.StringUtils;
 import org.littleshoot.proxy.impl.ProxyUtils;
@@ -196,7 +191,7 @@ public abstract class T1Utils {
 		 * note that FullHttpMessage also implements HttpContent, so we need to test
 		 * HttpContent only
 		 */
-		if (obj instanceof HttpContent) {
+		if (ProxyUtils.hasContent(obj)) {
 			return readBytesUnchanged(((HttpContent) obj).content());
 		} else {
 			return EMPTY_BYTES;
@@ -218,54 +213,39 @@ public abstract class T1Utils {
 	}
 
 	/**
-	 * Set the bytes into the specified httpObject. May create new httpObject of the
-	 * same type and set data into it then return when the original httpObject's
-	 * byte buffer has not enough capacity to write.
+	 * Set the bytes into the specified httpObject. May create new byteBufs and set
+	 * data into it when the original httpObject's byte buffer has not enough
+	 * capacity to write.
 	 * 
 	 * @param httpObj
 	 *            the original request/response or chunk
 	 * @param data
 	 *            the data to be set
 	 * 
-	 * @return the modified http object, may be newly created
 	 */
-	public static HttpObject setContentBytes(HttpObject httpObj, byte[] data) {
-		if (!(httpObj instanceof FullHttpMessage
-				|| (httpObj instanceof HttpContent && !(httpObj instanceof LastHttpContent)))) {
+	public static void setContentBytes(HttpObject httpObj, byte[] data) {
+		if (!(ProxyUtils.hasContent(httpObj))) {
 			throw new IllegalArgumentException("Cannot set bytes into a no content object: " + String.valueOf(httpObj));
 		}
 		if (data == null) {
 			data = EMPTY_BYTES;
 		}
-		HttpObject ret = null;
 		ByteBuf bb = ((HttpContent) httpObj).content();// note that FullHttpMessage is also a HttpContent instance
 		if (isInplacelyWritable(bb, data.length)) {
 			// 1.fist try to modify bytes in place
-			ret = httpObj;
 			setBytes(bb, data);
 		} else {
-			// 2.if no capacity to write, swap the whole object
-			if (httpObj instanceof FullHttpRequest) {
-				ByteBuf body = Unpooled.wrappedBuffer(data);
-				setBytes(body, data);
-				ret = ProxyUtils.createFullHttpRequestWithSameHeaders((FullHttpRequest) httpObj, body);
-			} else if (httpObj instanceof FullHttpResponse) {
-				ByteBuf body = Unpooled.wrappedBuffer(data);
-				setBytes(body, data);
-				ret = ProxyUtils.createFullHttpResponseWithSameHeaders((FullHttpResponse) httpObj, body);
-			} else if (httpObj instanceof HttpContent && !(httpObj instanceof LastHttpContent)) {
-				ByteBuf body = Unpooled.wrappedBuffer(data);
-				setBytes(body, data);
-				ret = new DefaultHttpContent(body);
-			} else {
-				throw new RuntimeException("Impossible.");
-			}
+			// 2.if no capacity to write, swap the whole byteBuf in httpContent
+			HttpContent httpCtt = (HttpContent) httpObj;
+			ByteBuf orig = httpCtt.content();
+			SwappedByteBuf sbuf = new SwappedByteBuf(orig);
+			ProxyUtils.setContentBuf(httpCtt, sbuf);
+			setBytes(sbuf, data);
 		}
-		if (ret instanceof FullHttpMessage) {
+		if (httpObj instanceof FullHttpMessage) {
 			// also set the content length respectively
-			HttpHeaders.setContentLength((HttpMessage) ret, data.length);
+			HttpHeaders.setContentLength((HttpMessage) httpObj, data.length);
 		}
-		return ret;
 	}
 
 	// tell if there's enough space to write
@@ -295,13 +275,18 @@ public abstract class T1Utils {
 		if (rst == 0 || rst == 2) {
 			bb.writeBytes(data);
 		} else {
-			/*
-			 * not enough capacity, write operation failed, reset the writer index(recover
-			 * the discarded unread data)
-			 */
+			// restore the unread data
 			bb.writerIndex(writeIdx);
-			throw new IllegalArgumentException(
-					"Not enough capacity to write, 'setBytes' failed, the byteBuf will be left unchanged.");
+			if (bb instanceof SwappedByteBuf) {
+				// if is of type swapped buf, swap the whole buf
+				((SwappedByteBuf) bb).swapWriteBytes(data);
+			} else {
+				/*
+				 * not enough capacity, write operation failed
+				 */
+				throw new IllegalArgumentException(
+						"Not enough capacity to write or buf swapping failed, 'setBytes' failed, the byteBuf will be left unchanged.");
+			}
 		}
 	}
 }

@@ -13,6 +13,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Function;
 import java.util.regex.Pattern;
 
 import javax.net.ssl.SSLSession;
@@ -39,7 +40,6 @@ import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.HttpVersion;
 import io.netty.handler.timeout.IdleStateHandler;
 import io.netty.handler.traffic.GlobalTrafficShapingHandler;
-import io.netty.util.ReferenceCountUtil;
 import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.GenericFutureListener;
 import org.apache.commons.lang3.StringUtils;
@@ -371,13 +371,14 @@ public class ClientToProxyConnection extends ProxyConnection<HttpRequest> {
             numberOfReusedServerConnections.incrementAndGet();
         }
 
+        // TODO pf_miles: on sending request to server, intercepts here!!!
+        HttpResponse proxyToServerFilterResponse = currentFilters.proxyToServerRequest(httpRequest);
+
         modifyRequestHeadersToReflectProxying(httpRequest);
 
-        // TODO	pf_miles: on sending request to server, intercepts here!!!
-        HttpResponse proxyToServerFilterResponse = currentFilters.proxyToServerRequest(httpRequest);
         if (proxyToServerFilterResponse != null) {
             LOG.debug("Responding to client with short-circuit response from filter: {}", proxyToServerFilterResponse);
-
+            ProxyUtils.releaseAnyCreatedBuf(httpRequest);
             boolean keepAlive = respondWithShortCircuitResponse(proxyToServerFilterResponse);
             if (keepAlive) {
                 return AWAITING_INITIAL;
@@ -387,7 +388,13 @@ public class ClientToProxyConnection extends ProxyConnection<HttpRequest> {
         }
 
         LOG.debug("Writing request to ProxyToServerConnection");
-        currentServerConnection.write(httpRequest, currentFilters);
+        ProxyUtils.swappableBufWriteTrick(httpRequest, new Function<HttpObject, Void>() {
+			@Override
+			public Void apply(HttpObject obj) {
+				currentServerConnection.write(obj, currentFilters);
+				return null;
+			}
+        });
 
         // Figure out our next state
         if (ProxyUtils.isCONNECT(httpRequest)) {
@@ -448,9 +455,15 @@ public class ClientToProxyConnection extends ProxyConnection<HttpRequest> {
     @Override
     protected void readHTTPChunk(HttpContent chunk) {
         currentFilters.clientToProxyRequest(chunk);
-        // TODO	pf_miles: on sending request to server, intercepts here!!!
+        // TODO pf_miles: on sending request to server, intercepts here!!!
         currentFilters.proxyToServerRequest(chunk);
-        currentServerConnection.write(chunk);
+        ProxyUtils.swappableBufWriteTrick(chunk, new Function<HttpObject, Void>() {
+			@Override
+			public Void apply(HttpObject obj) {
+				currentServerConnection.write(obj);
+				return null;
+			}
+        });
     }
 
     @Override
@@ -519,29 +532,27 @@ public class ClientToProxyConnection extends ProxyConnection<HttpRequest> {
             modifyResponseHeadersToReflectProxying(httpResponse);
         }
         // TODO pf_miles: on responding filter intercepts here!!!
-        HttpObject orig = httpObject;
-        try {
-	        httpObject = filters.proxyToClientResponse(httpObject);
-	        if (httpObject == null) {
-	            forceDisconnect(serverConnection);
-	            this.perReqVals.setNeedFiltering(false);
-	            return;
-	        }
-	
-	        write(httpObject);
-	
-	        if (ProxyUtils.isLastChunk(httpObject)) {
-	            writeEmptyBuffer();
-	        }
-	
-	        closeConnectionsAfterWriteIfNecessary(serverConnection,
-	                currentHttpRequest, currentHttpResponse, httpObject);
-        } finally {
-        	// if the original httpObject is changed with a new one, release the new one by hand
-        	if (httpObject != null && orig != httpObject) {
-            	ReferenceCountUtil.release(httpObject);
-            }
+        httpObject = filters.proxyToClientResponse(httpObject);
+        if (httpObject == null) {
+        	ProxyUtils.releaseAnyCreatedBuf(httpObject);
+            forceDisconnect(serverConnection);
+            this.perReqVals.setNeedFiltering(false);
+            return;
         }
+        ProxyUtils.swappableBufWriteTrick(httpObject, new Function<HttpObject, Void>() {
+			@Override
+			public Void apply(HttpObject obj) {
+				write(obj);
+				return null;
+			}
+        });
+
+        if (ProxyUtils.isLastChunk(httpObject)) {
+            writeEmptyBuffer();
+        }
+
+        closeConnectionsAfterWriteIfNecessary(serverConnection,
+                currentHttpRequest, currentHttpResponse, httpObject);
     }
 
     /***************************************************************************

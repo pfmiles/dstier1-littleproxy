@@ -13,7 +13,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * No site mapping, response interfering
+ * Simple http to http site mapping and reponse content interfering
  * 
  * @author pf-miles
  *
@@ -60,7 +60,8 @@ public class Demo1 {
 					}
 
 					@Override
-					public HttpResponse onRequesting(HttpObject httpObj) {
+					@ExeOrder(1)
+					public HttpResponse onRequesting(HttpObject httpObj) {// TODO httpRequestContext
 						return null;
 					}
 
@@ -74,7 +75,7 @@ public class Demo1 {
 							String dataStr = new String(data, this.respEncoding);
 							dataStr = doModify(dataStr);
 							data = dataStr.getBytes(this.respEncoding);
-							httpObj = T1Utils.setContentBytes(httpObj, data);
+							T1Utils.setContentBytes(httpObj, data);
 						}
 						return httpObj;
 					}
