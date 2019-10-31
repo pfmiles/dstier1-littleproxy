@@ -80,7 +80,8 @@ public class DsT1AdaptingHttpFilters extends HttpFiltersAdapter {
 		for (SortableFilterMethod m : this.sortedReqFilteringMethods) {
 			try {
 				// onRequesting filtering...
-				HttpResponse shortRsp = (HttpResponse) m.getMethod().invoke(m.getFilter(), httpObject);
+				HttpResponse shortRsp = (HttpResponse) m.getMethod().invoke(m.getFilter(), httpObject,
+						this.perReqVals.getContext());
 				if (shortRsp != null) {
 					if (logger.isDebugEnabled()) {
 						logger.debug("Filter method: '" + m.getMethod()
@@ -180,7 +181,7 @@ public class DsT1AdaptingHttpFilters extends HttpFiltersAdapter {
 		HttpObject rsp = httpObject;
 		for (SortableFilterMethod m : this.sortedRspFilteringMethods) {
 			try {
-				rsp = (HttpObject) m.getMethod().invoke(m.getFilter(), rsp);
+				rsp = (HttpObject) m.getMethod().invoke(m.getFilter(), rsp, this.perReqVals.getContext());
 			} catch (Exception e) {
 				if (this.failFastOnFilterError) {
 					// terminate processing and disconnect directly

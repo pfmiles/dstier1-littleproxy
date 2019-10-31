@@ -15,7 +15,9 @@
  ******************************************************************************/
 package com.github.pfmiles.dstier1.impl;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.apache.commons.lang3.tuple.Pair;
 
@@ -48,6 +50,11 @@ public class ValueHolder {
 	 * tell if the current request is a https request
 	 */
 	private Boolean httpsRequest;
+	/**
+	 * the context shared among all the activated onRequesting/onResponding methods
+	 * in this entire progress of request
+	 */
+	private Map<String, Object> context = new HashMap<>();
 
 	public Boolean getHttpsRequest() {
 		return httpsRequest;
@@ -87,6 +94,10 @@ public class ValueHolder {
 
 	public void setToSite(String toSite) {
 		this.toSite = toSite;
+	}
+
+	public Map<String, Object> getContext() {
+		return context;
 	}
 
 }

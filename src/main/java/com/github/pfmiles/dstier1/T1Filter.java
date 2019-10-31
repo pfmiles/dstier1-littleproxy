@@ -15,6 +15,8 @@
  ******************************************************************************/
 package com.github.pfmiles.dstier1;
 
+import java.util.Map;
+
 import io.netty.handler.codec.http.HttpObject;
 import io.netty.handler.codec.http.HttpResponse;
 
@@ -49,9 +51,12 @@ public interface T1Filter {
 	 * @param httpObj
 	 *            the HttpRequest object to be filtered, or HttpContent object
 	 *            during a chunked encoding request transmission.
+	 * @param reqContext
+	 *            a context shared among all the onRequesting and onResponding
+	 *            methods during this progress of request
 	 * @return null to continue processing as usual, or a short-circuit response
 	 */
-	HttpResponse onRequesting(HttpObject httpObj);
+	HttpResponse onRequesting(HttpObject httpObj, Map<String, Object> reqContext);
 
 	/**
 	 * Filtering responses from server to client, returning null will force a
@@ -61,8 +66,11 @@ public interface T1Filter {
 	 * @param httpObj
 	 *            the response(HttpResponse) or chunk(HttpContent) object to be
 	 *            filtered.
+	 * @param reqContext
+	 *            a context shared among all the onRequesting and onResponding
+	 *            methods during this progress of request
 	 * @return a modified or unchanged response object(could either be a
 	 *         HttpResponse or a HttpContent), null will force a disconnect at once.
 	 */
-	HttpObject onResponding(HttpObject httpObj);
+	HttpObject onResponding(HttpObject httpObj, Map<String, Object> reqContext);
 }

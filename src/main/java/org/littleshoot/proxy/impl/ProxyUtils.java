@@ -15,6 +15,7 @@ import java.util.Date;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 import java.util.TimeZone;
@@ -873,13 +874,13 @@ public class ProxyUtils {
 		List<SortableFilterMethod> reqMs = new ArrayList<>(fs.size());
 		List<SortableFilterMethod> rspMs = new ArrayList<>(fs.size());
 		for (T1Filter f : fs) {
-			Method reqMethod = resolveFilterMethod(f, "onRequesting", HttpObject.class);
+			Method reqMethod = resolveFilterMethod(f, "onRequesting", HttpObject.class, Map.class);
 			if (reqMethod == null) {
 				LOG.error("Cannot find 'onRequesting' method in filter: '" + f.getClass().getName()
 						+ "', this filter will be ignored.");
 				continue;
 			}
-			Method rspMethod = resolveFilterMethod(f, "onResponding", HttpObject.class);
+			Method rspMethod = resolveFilterMethod(f, "onResponding", HttpObject.class, Map.class);
 			if (rspMethod == null) {
 				LOG.error("Cannot find 'onResponding' method in filter: '" + f.getClass().getName()
 						+ "', this filter will be ignored.");
@@ -920,7 +921,7 @@ public class ProxyUtils {
 	 *            the name of the method
 	 * @return the found method
 	 */
-	private static Method resolveFilterMethod(T1Filter o, String methodName, Class<?> paramType) {
+	private static Method resolveFilterMethod(T1Filter o, String methodName, Class<?>... paramTypes) {
 		if (o == null || StringUtils.isBlank(methodName)) {
 			return null;
 		}
@@ -936,7 +937,7 @@ public class ProxyUtils {
 						LOG.debug("T1Filter method cache miss, reflecting filter method for filter: '" + c.getName()
 								+ "', method: '" + methodName + "'.");
 					}
-					Method method = c.getMethod(methodName, paramType);
+					Method method = c.getMethod(methodName, paramTypes);
 					if (method == null) {
 						if (LOG.isDebugEnabled()) {
 							LOG.debug("Could not find method with name: '" + methodName + "' in filter class: '"
