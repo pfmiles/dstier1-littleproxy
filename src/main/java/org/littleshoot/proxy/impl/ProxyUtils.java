@@ -856,6 +856,14 @@ public class ProxyUtils {
 		}
 		// 2.replace host header
 		String hostAndPort = StringUtils.substringAfter(site, "://");
+		if (!StringUtils.contains(hostAndPort, ":")) {
+			// try to figure out port when no port info contains
+			String scheme = StringUtils.substringBefore(site, "://");
+			Integer p = WellKnownPortsMapping.getPortByName(scheme);
+			if (p != null) {
+				hostAndPort = hostAndPort + ":" + p;
+			}
+		}
 		httpRequest.headers().set(HttpHeaders.Names.HOST, hostAndPort);
 	}
 
@@ -1083,17 +1091,23 @@ public class ProxyUtils {
 	public static boolean isHttpsRequest(HttpRequest request, ValueHolder perReqVals) {
 		Boolean https = perReqVals.getHttpsRequest();
 		if (https == null) {
+			https = Boolean.FALSE;
 			// if the uri starts with https, true
 			if (request.getUri().startsWith("https://")) {
 				https = Boolean.TRUE;
 			} else {
-				// else if the host header indicates a 443 port connection, true
-				String hostAndPort = parseHostAndPort(request);
-				if (hostAndPort != null && hostAndPort.contains(":")
-						&& "443".equals(StringUtils.substringAfter(hostAndPort, ":"))) {
+				// may be an 'origin' form request
+				// try figure from the mapped 'toSite'
+				String toSite = perReqVals.getToSite();
+				if (StringUtils.isNotBlank(toSite) && toSite.startsWith("https://")) {
 					https = Boolean.TRUE;
 				} else {
-					https = Boolean.FALSE;
+					// else if the host header indicates a 443 port connection, true
+					String hostAndPort = parseHostAndPort(request);
+					if (hostAndPort != null && hostAndPort.contains(":")
+							&& "443".equals(StringUtils.substringAfter(hostAndPort, ":"))) {
+						https = Boolean.TRUE;
+					}
 				}
 			}
 			perReqVals.setHttpsRequest(https);

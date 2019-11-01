@@ -18,6 +18,7 @@ import java.util.regex.Pattern;
 
 import javax.net.ssl.SSLSession;
 
+import com.gargoylesoftware.htmlunit.javascript.host.fetch.Headers;
 import com.github.pfmiles.dstier1.impl.ValueHolder;
 import com.google.common.io.BaseEncoding;
 import io.netty.buffer.ByteBuf;
@@ -371,10 +372,10 @@ public class ClientToProxyConnection extends ProxyConnection<HttpRequest> {
             numberOfReusedServerConnections.incrementAndGet();
         }
 
+        modifyRequestHeadersToReflectProxying(httpRequest);
+
         // TODO pf_miles: on sending request to server, intercepts here!!!
         HttpResponse proxyToServerFilterResponse = currentFilters.proxyToServerRequest(httpRequest);
-
-        modifyRequestHeadersToReflectProxying(httpRequest);
 
         if (proxyToServerFilterResponse != null) {
             LOG.debug("Responding to client with short-circuit response from filter: {}", proxyToServerFilterResponse);
@@ -1146,23 +1147,24 @@ public class ClientToProxyConnection extends ProxyConnection<HttpRequest> {
      * @param httpRequest
      */
     private void modifyRequestHeadersToReflectProxying(HttpRequest httpRequest) {
-        if (!currentServerConnection.hasUpstreamChainedProxy()) {
-            /*
-             * We are making the request to the origin server, so must modify
-             * the 'absolute-URI' into the 'origin-form' as per RFC 7230
-             * section 5.3.1.
-             *
-             * This must happen even for 'transparent' mode, otherwise the origin
-             * server could infer that the request came via a proxy server.
-             */
-            LOG.debug("Modifying request for proxy chaining");
-            // Strip host from uri
-            String uri = httpRequest.getUri();
-            String adjustedUri = ProxyUtils.stripHost(uri);
-            LOG.debug("Stripped host from uri: {}    yielding: {}", uri,
-                    adjustedUri);
-            httpRequest.setUri(adjustedUri);
-        }
+    	// pf_miles: note that we can modify uri or headers in T1Filters, so we need not make all requests 'origin' here
+		//        if (!currentServerConnection.hasUpstreamChainedProxy()) {
+		//            /*
+		//             * We are making the request to the origin server, so must modify
+		//             * the 'absolute-URI' into the 'origin-form' as per RFC 7230
+		//             * section 5.3.1.
+		//             *
+		//             * This must happen even for 'transparent' mode, otherwise the origin
+		//             * server could infer that the request came via a proxy server.
+		//             */
+		//            LOG.debug("Modifying request for proxy chaining");
+		//            // Strip host from uri
+		//            String uri = httpRequest.getUri();
+		//            String adjustedUri = ProxyUtils.stripHost(uri);
+		//            LOG.debug("Stripped host from uri: {}    yielding: {}", uri,
+		//                    adjustedUri);
+		//            httpRequest.setUri(adjustedUri);
+		//        }
         if (!proxyServer.isTransparent()) {
             LOG.debug("Modifying request headers for proxying");
 

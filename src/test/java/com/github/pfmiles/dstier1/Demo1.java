@@ -4,6 +4,7 @@ import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 
 import com.github.pfmiles.dstier1.impl.T1Utils;
 import io.netty.handler.codec.http.HttpMethod;
@@ -61,12 +62,12 @@ public class Demo1 {
 
 					@Override
 					@ExeOrder(1)
-					public HttpResponse onRequesting(HttpObject httpObj) {// TODO httpRequestContext
+					public HttpResponse onRequesting(HttpObject httpObj, Map<String, Object> ctx) {
 						return null;
 					}
 
 					@Override
-					public HttpObject onResponding(HttpObject httpObj) {
+					public HttpObject onResponding(HttpObject httpObj, Map<String, Object> ctx) {
 						if (httpObj instanceof HttpResponse) {
 							this.respEncoding = T1Utils.getContentEncoding((HttpResponse) httpObj);
 						}

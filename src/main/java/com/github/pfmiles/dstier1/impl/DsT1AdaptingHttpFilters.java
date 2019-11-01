@@ -17,7 +17,9 @@ package com.github.pfmiles.dstier1.impl;
 
 import java.net.InetSocketAddress;
 import java.util.List;
+import java.util.Map;
 
+import com.github.pfmiles.dstier1.ReqCtxKeys;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http.FullHttpResponse;
 import io.netty.handler.codec.http.HttpObject;
@@ -81,7 +83,7 @@ public class DsT1AdaptingHttpFilters extends HttpFiltersAdapter {
 			try {
 				// onRequesting filtering...
 				HttpResponse shortRsp = (HttpResponse) m.getMethod().invoke(m.getFilter(), httpObject,
-						this.perReqVals.getContext());
+						prepareDftCtxVals(this.perReqVals.getContext()));
 				if (shortRsp != null) {
 					if (logger.isDebugEnabled()) {
 						logger.debug("Filter method: '" + m.getMethod()
@@ -108,6 +110,13 @@ public class DsT1AdaptingHttpFilters extends HttpFiltersAdapter {
 			}
 		}
 		return null;
+	}
+
+	// setting the default context values define in 'ReqCtxKeys.java'
+	private Map<String, Object> prepareDftCtxVals(Map<String, Object> context) {
+		context.put(ReqCtxKeys.FROM_SITE, this.perReqVals.getFromSite());
+		context.put(ReqCtxKeys.TO_SITE, this.perReqVals.getToSite());
+		return context;
 	}
 
 	private static HttpResponse createBadGatewayRsp(String errMsg) {

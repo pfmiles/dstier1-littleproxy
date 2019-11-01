@@ -289,4 +289,11 @@ public abstract class T1Utils {
 			}
 		}
 	}
+
+	/**
+	 * get the string value in header using the specified header name
+	 */
+	public static String getHeaderValue(HttpMessage msg, String name) {
+		return HttpHeaders.getHeader(msg, name);
+	}
 }
